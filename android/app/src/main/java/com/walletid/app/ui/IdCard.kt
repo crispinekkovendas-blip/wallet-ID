@@ -16,7 +16,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -94,7 +96,9 @@ fun IdCard(doc: Doc, modifier: Modifier = Modifier, reveal: Boolean = false) {
         val country = if (t.key == "passport" && doc["country"].isNotEmpty()) doc["country"].uppercase() else "BRASIL"
         val expiry = doc.expiry
 
-        Column(Modifier.fillMaxSize().padding(horizontal = w * 0.07f, vertical = w * 0.065f)) {
+        // The app's default body style carries a 24sp line height, far too tall for card text.
+        CompositionLocalProvider(LocalTextStyle provides TextStyle.Default) {
+        Column(Modifier.fillMaxSize().padding(horizontal = w * 0.07f, vertical = w * 0.06f)) {
             Row(verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
                     Text(
@@ -179,6 +183,7 @@ fun IdCard(doc: Doc, modifier: Modifier = Modifier, reveal: Boolean = false) {
                     }
                 }
             }
+        }
         }
     }
 }

@@ -66,9 +66,10 @@ import com.walletid.app.data.ExpiryLevel
 @Composable
 fun LockScreen(canAuthenticate: Boolean, error: String?, onUnlock: () -> Unit, onOpenSecuritySettings: () -> Unit) {
     Box(Modifier.fillMaxSize().background(Palette.Bg)) {
-        Canvas(Modifier.fillMaxWidth().height(420.dp)) {
-            drawRect(Brush.radialGradient(listOf(Palette.Accent.copy(alpha = 0.32f), Color.Transparent), Offset(size.width * 0.3f, size.height * 0.45f), size.width * 0.75f))
-            drawRect(Brush.radialGradient(listOf(Palette.Accent2.copy(alpha = 0.26f), Color.Transparent), Offset(size.width * 0.75f, size.height * 0.35f), size.width * 0.7f))
+        Canvas(Modifier.fillMaxSize()) {
+            val top = size.height * 0.24f
+            drawRect(Brush.radialGradient(listOf(Palette.Accent.copy(alpha = 0.30f), Color.Transparent), Offset(size.width * 0.3f, top), size.width * 0.8f))
+            drawRect(Brush.radialGradient(listOf(Palette.Accent2.copy(alpha = 0.24f), Color.Transparent), Offset(size.width * 0.78f, top * 0.8f), size.width * 0.75f))
         }
         Column(
             Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 28.dp),
@@ -208,7 +209,7 @@ fun WalletScreen(
                     IdCard(
                         d,
                         Modifier
-                            .then(if (stacked && !last) Modifier.peek(78.dp) else Modifier)
+                            .then(if (stacked && !last) Modifier.peek(88.dp) else Modifier)
                             .clip(RoundedCornerShape(20.dp))
                             .clickable { onOpen(d.id) },
                     )
