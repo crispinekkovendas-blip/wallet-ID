@@ -4,7 +4,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-enum class Side(val key: String) { FRONT("front"), BACK("back") }
+/** FRONT/BACK are the card photos; QR is an optional exact crop of the document's QR code. */
+enum class Side(val key: String) { FRONT("front"), BACK("back"), QR("qr") }
 
 /**
  * Encrypted on-disk store. Everything under [dir] is ciphertext:

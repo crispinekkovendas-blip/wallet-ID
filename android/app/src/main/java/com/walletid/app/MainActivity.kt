@@ -1,13 +1,8 @@
 package com.walletid.app
 
-import android.content.ClipData
-import android.content.ClipDescription
-import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.PersistableBundle
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.WindowManager
@@ -22,6 +17,13 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,14 +48,12 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.walletid.app.data.Side
 import com.walletid.app.ui.BusyOverlay
-import com.walletid.app.ui.DetailScreen
+import com.walletid.app.ui.CardScreen
 import com.walletid.app.ui.EditScreen
 import com.walletid.app.ui.EraseDialog
 import com.walletid.app.ui.LockScreen
 import com.walletid.app.ui.Palette
 import com.walletid.app.ui.PassphraseDialog
-import com.walletid.app.ui.PhotoViewer
-import com.walletid.app.ui.PickerScreen
 import com.walletid.app.ui.SettingsScreen
 import com.walletid.app.ui.WalletScreen
 import com.walletid.app.ui.WalletTheme
@@ -80,7 +80,6 @@ class MainActivity : FragmentActivity() {
                     authError = authError,
                     onUnlock = ::authenticate,
                     onOpenSecuritySettings = { startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) },
-                    onCopy = ::copyToClipboard,
                     onShare = ::share,
                 )
             }
@@ -142,16 +141,6 @@ class MainActivity : FragmentActivity() {
         )
     }
 
-    private fun copyToClipboard(label: String, value: String) {
-        val clip = ClipData.newPlainText(label, value)
-        // Hide the copied number from the keyboard's clipboard preview (Android 13+).
-        clip.description.extras = PersistableBundle().apply {
-            if (Build.VERSION.SDK_INT >= 33) putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
-            else putBoolean("android.content.extra.IS_SENSITIVE", true)
-        }
-        getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
-    }
-
     private fun share(uri: Uri) {
         val send = Intent(Intent.ACTION_SEND).apply {
             type = contentResolver.getType(uri) ?: "image/*"
@@ -163,6 +152,7 @@ class MainActivity : FragmentActivity() {
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun AppRoot(
     vm: AppViewModel,
@@ -170,7 +160,6 @@ private fun AppRoot(
     authError: String?,
     onUnlock: () -> Unit,
     onOpenSecuritySettings: () -> Unit,
-    onCopy: (String, String) -> Unit,
     onShare: (Uri) -> Unit,
 ) {
     val snackbar = remember { SnackbarHostState() }
@@ -179,7 +168,7 @@ private fun AppRoot(
 
     var photoSide by remember { mutableStateOf(Side.FRONT) }
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
-    var viewer by remember { mutableStateOf<ImageBitmap?>(null) }
+    var qrFor by remember { mutableStateOf<String?>(null) }
     var askExport by remember { mutableStateOf(false) }
     var exportPass by remember { mutableStateOf<String?>(null) }
     var importUri by remember { mutableStateOf<Uri?>(null) }
@@ -187,6 +176,9 @@ private fun AppRoot(
 
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) vm.pickImage(photoSide, uri)
+    }
+    val pickQr = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) vm.pickQrImage(uri)
     }
     val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         cameraUri?.let { if (ok) vm.pickImage(photoSide, it) }
@@ -201,78 +193,102 @@ private fun AppRoot(
     }
 
     BackHandler(enabled = vm.unlocked && vm.stack.size > 1) { vm.back() }
+    BackHandler(enabled = qrFor != null) { qrFor = null }
 
     Box(Modifier.fillMaxSize().background(Palette.Bg)) {
         if (!vm.unlocked) {
             LockScreen(canAuthenticate, authError, onUnlock, onOpenSecuritySettings)
         } else {
-            when (val s = vm.screen) {
-                Screen.Wallet -> WalletScreen(
-                    docs = vm.visibleDocs,
-                    totalCount = vm.docs.size,
-                    query = vm.query,
-                    onQuery = { vm.query = it },
-                    onOpen = { vm.open(Screen.Detail(it)) },
-                    onAdd = { vm.open(Screen.Picker) },
-                    onSettings = { vm.open(Screen.Settings) },
-                    onLock = vm::lock,
-                )
-                Screen.Picker -> PickerScreen(onBack = { vm.back() }, onPick = { vm.startAdd(it.key) })
-                Screen.Edit -> vm.edit?.let { session ->
-                    EditScreen(
-                        session = session,
-                        onCancel = { vm.back() },
-                        onSave = vm::save,
-                        onChoosePhoto = { side ->
-                            photoSide = side
-                            vm.externalActivity = true
-                            pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        },
-                        onTakePhoto = { side ->
-                            photoSide = side
-                            val uri = vm.newCameraUri()
-                            cameraUri = uri
-                            vm.externalActivity = true
-                            takePhoto.launch(uri)
-                        },
-                        onRemovePhoto = vm::removeImage,
-                    )
+            SharedTransitionLayout {
+                AnimatedContent(
+                    targetState = vm.screen,
+                    transitionSpec = { fadeIn(tween(320)) togetherWith fadeOut(tween(320)) },
+                    label = "screens",
+                ) { s ->
+                    // The tapped card grows from its place in the wallet into the full-size card.
+                    val cardModifier: @Composable (String) -> Modifier = { id ->
+                        Modifier.sharedElement(
+                            rememberSharedContentState(key = "card-$id"),
+                            animatedVisibilityScope = this@AnimatedContent,
+                        )
+                    }
+                    when (s) {
+                        Screen.Wallet -> WalletScreen(
+                            docs = vm.visibleDocs,
+                            thumbs = vm.thumbs,
+                            totalCount = vm.docs.size,
+                            query = vm.query,
+                            onQuery = { vm.query = it },
+                            onOpen = { vm.open(Screen.Detail(it)) },
+                            onAdd = vm::startAdd,
+                            onSettings = { vm.open(Screen.Settings) },
+                            onLock = vm::lock,
+                            cardModifier = cardModifier,
+                        )
+                        Screen.Edit -> vm.edit?.let { session ->
+                            EditScreen(
+                                session = session,
+                                onCancel = { vm.back() },
+                                onSave = vm::save,
+                                onChoosePhoto = { side ->
+                                    photoSide = side
+                                    vm.externalActivity = true
+                                    pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                },
+                                onTakePhoto = { side ->
+                                    photoSide = side
+                                    val uri = vm.newCameraUri()
+                                    cameraUri = uri
+                                    vm.externalActivity = true
+                                    takePhoto.launch(uri)
+                                },
+                                onRemovePhoto = vm::removeImage,
+                                onLabel = vm::setLabel,
+                                onQrFromImage = {
+                                    vm.externalActivity = true
+                                    pickQr.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                },
+                                onQrText = vm::setQrText,
+                            )
+                        }
+                        is Screen.Detail -> vm.doc(s.id)?.let { doc ->
+                            val version = vm.imagesVersion
+                            var flipped by remember(doc.id) { mutableStateOf(false) }
+                            val front by produceState(vm.thumbs[doc.id], doc.id, version) { value = vm.image(doc.id, Side.FRONT, 1800) ?: value }
+                            val back by produceState<ImageBitmap?>(null, doc.id, version) { value = vm.image(doc.id, Side.BACK, 1800) }
+                            val hasQr = vm.hasQr(doc.id)
+                            val qr by produceState<ImageBitmap?>(null, doc.id, version, hasQr) { value = if (hasQr) vm.qrImage(doc.id) else null }
+                            CardScreen(
+                                doc = doc,
+                                front = front,
+                                back = back,
+                                hasQr = hasQr,
+                                qr = qr,
+                                showQr = qrFor == doc.id,
+                                flipped = flipped,
+                                onFlip = { flipped = !flipped },
+                                onShowQr = { qrFor = if (it) doc.id else null },
+                                onBack = { vm.back() },
+                                onEdit = { vm.startEdit(doc.id) },
+                                onShare = { side -> scope.launch { vm.sharePhotoUri(doc.id, side)?.let(onShare) } },
+                                onDelete = { vm.delete(doc.id) },
+                                frontModifier = cardModifier(doc.id),
+                            )
+                        }
+                        Screen.Settings -> SettingsScreen(
+                            lockAfterSeconds = vm.lockAfterSeconds,
+                            version = BuildConfig.VERSION_NAME,
+                            onLockAfter = vm::setLockAfter,
+                            onExport = { askExport = true },
+                            onImport = {
+                                vm.externalActivity = true
+                                openBackup.launch(arrayOf("*/*"))
+                            },
+                            onErase = { askErase = true },
+                            onBack = { vm.back() },
+                        )
+                    }
                 }
-                is Screen.Detail -> vm.doc(s.id)?.let { doc ->
-                    val version = vm.imagesVersion
-                    val front by produceState<ImageBitmap?>(null, doc.id, version) { value = vm.image(doc.id, Side.FRONT, 1200) }
-                    val back by produceState<ImageBitmap?>(null, doc.id, version) { value = vm.image(doc.id, Side.BACK, 1200) }
-                    DetailScreen(
-                        doc = doc,
-                        reveal = vm.reveal,
-                        front = front,
-                        back = back,
-                        onBack = { vm.back() },
-                        onEdit = { vm.startEdit(doc.id) },
-                        onToggleReveal = { vm.reveal = !vm.reveal },
-                        onCopy = { label, value ->
-                            onCopy(label, value)
-                            vm.messages.tryEmit("$label copied")
-                        },
-                        onShare = { scope.launch { vm.sharePhotoUri(doc.id)?.let(onShare) } },
-                        onOpenPhoto = { side ->
-                            scope.launch { viewer = vm.image(doc.id, side, 2400) }
-                        },
-                        onDelete = { vm.delete(doc.id) },
-                    )
-                }
-                Screen.Settings -> SettingsScreen(
-                    lockAfterSeconds = vm.lockAfterSeconds,
-                    version = BuildConfig.VERSION_NAME,
-                    onLockAfter = vm::setLockAfter,
-                    onExport = { askExport = true },
-                    onImport = {
-                        vm.externalActivity = true
-                        openBackup.launch(arrayOf("*/*"))
-                    },
-                    onErase = { askErase = true },
-                    onBack = { vm.back() },
-                )
             }
         }
 
@@ -281,8 +297,6 @@ private fun AppRoot(
         }
         vm.busy?.let { BusyOverlay(it) }
     }
-
-    viewer?.let { PhotoViewer(it) { viewer = null } }
 
     if (askExport) {
         PassphraseDialog(

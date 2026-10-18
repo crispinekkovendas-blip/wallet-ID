@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,16 +19,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBackIos
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Fingerprint
@@ -39,7 +33,6 @@ import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -50,6 +43,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -57,7 +51,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.walletid.app.data.Doc
-import com.walletid.app.data.DocType
 import com.walletid.app.data.DocTypes
 import com.walletid.app.data.ExpiryLevel
 
@@ -125,6 +118,7 @@ fun LockScreen(canAuthenticate: Boolean, error: String?, onUnlock: () -> Unit, o
 @Composable
 fun WalletScreen(
     docs: List<Doc>,
+    thumbs: Map<String, ImageBitmap?>,
     totalCount: Int,
     query: String,
     onQuery: (String) -> Unit,
@@ -132,6 +126,7 @@ fun WalletScreen(
     onAdd: () -> Unit,
     onSettings: () -> Unit,
     onLock: () -> Unit,
+    cardModifier: @Composable (String) -> Modifier = { Modifier },
 ) {
     Box(Modifier.fillMaxSize().background(Palette.Bg)) {
         Column(
@@ -144,12 +139,12 @@ fun WalletScreen(
             Row(Modifier.padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 14.dp), verticalAlignment = Alignment.Bottom) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        if (totalCount == 0) "Wallet" else "$totalCount document${if (totalCount == 1) "" else "s"} · encrypted",
+                        if (totalCount == 0) "Wallet" else "$totalCount card${if (totalCount == 1) "" else "s"} · encrypted",
                         color = Palette.Text3,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                     )
-                    Text("My documents", style = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp, color = Palette.Text))
+                    Text("My wallet", style = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp, color = Palette.Text))
                 }
                 CircleIconButton(Icons.Rounded.Tune, "Settings", onSettings)
                 Spacer(Modifier.width(8.dp))
@@ -192,7 +187,7 @@ fun WalletScreen(
 
             if (docs.isEmpty()) {
                 Text(
-                    "No documents match “${query.trim()}”",
+                    "No cards match “${query.trim()}”",
                     color = Palette.Text3,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(40.dp),
@@ -206,11 +201,13 @@ fun WalletScreen(
             ) {
                 docs.forEachIndexed { i, d ->
                     val last = i == docs.lastIndex
-                    IdCard(
+                    PhotoCard(
                         d,
+                        thumbs[d.id],
                         Modifier
-                            .then(if (stacked && !last) Modifier.peek(88.dp) else Modifier)
-                            .clip(RoundedCornerShape(20.dp))
+                            .then(if (stacked && !last) Modifier.peek(84.dp) else Modifier)
+                            .then(cardModifier(d.id))
+                            .clip(RoundedCornerShape(18.dp))
                             .clickable { onOpen(d.id) },
                     )
                 }
@@ -230,7 +227,7 @@ fun WalletScreen(
                     .clickable(onClick = onAdd),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Rounded.Add, "Add document", tint = Color.White, modifier = Modifier.size(30.dp))
+                Icon(Icons.Rounded.Add, "Add card", tint = Color.White, modifier = Modifier.size(30.dp))
             }
         }
     }
@@ -251,7 +248,7 @@ private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modi
         Icon(Icons.Rounded.Search, null, tint = Palette.Text3, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
         Box(Modifier.weight(1f)) {
-            if (query.isEmpty()) Text("Search name, number, type…", color = Palette.Text3, fontSize = 16.sp)
+            if (query.isEmpty()) Text("Search cards…", color = Palette.Text3, fontSize = 16.sp)
             BasicTextField(
                 query,
                 onQuery,
@@ -288,57 +285,13 @@ private fun EmptyWallet(onAdd: () -> Unit) {
         Text("Your wallet is empty", color = Palette.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Add your RG, CNH, CRECI and other documents. Each one is encrypted before it's saved.",
+            "Add a photo of your RG, CNH, CRECI or any other card. Each one is encrypted before it's saved.",
             color = Palette.Text2,
             textAlign = TextAlign.Center,
             fontSize = 15.sp,
             lineHeight = 21.sp,
         )
         Spacer(Modifier.height(24.dp))
-        GradientButton("Add document", onAdd, icon = Icons.Rounded.Add)
-    }
-}
-
-// ---------------------------------------------------------------- Type picker
-
-@Composable
-fun PickerScreen(onBack: () -> Unit, onPick: (DocType) -> Unit) {
-    Column(Modifier.fillMaxSize().background(Palette.Bg)) {
-        NavBar("Add document", left = {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBackIos, "Back", tint = Palette.Text, modifier = Modifier.size(20.dp)) }
-        })
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 40.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.navigationBarsPadding(),
-        ) {
-            item(span = { GridItemSpan(2) }) {
-                Text("Choose the document type", color = Palette.Text2, fontSize = 15.sp, modifier = Modifier.padding(top = 10.dp, bottom = 4.dp))
-            }
-            items(DocTypes.all, key = { it.key }) { t ->
-                Column(
-                    Modifier
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(Palette.Surface)
-                        .border(1.dp, Palette.Line, RoundedCornerShape(18.dp))
-                        .clickable { onPick(t) }
-                        .padding(12.dp),
-                ) {
-                    TypeSwatch(t.c1, t.c2, t.ink, t.gold, t.abbr)
-                    Spacer(Modifier.height(10.dp))
-                    Text(if (t.key == "other") "Other" else t.abbr, color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                    Text(
-                        if (t.key == "other") t.sub else t.name,
-                        color = Palette.Text3,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                        maxLines = 2,
-                        minLines = 2,
-                    )
-                }
-            }
-        }
+        GradientButton("Add card", onAdd, icon = Icons.Rounded.Add)
     }
 }

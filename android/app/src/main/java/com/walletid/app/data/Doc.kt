@@ -10,10 +10,12 @@ data class Doc(val id: String, val fields: Map<String, String>) {
     operator fun get(key: String): String = fields[key].orEmpty()
 
     val title: String
-        get() = when (type.key) {
-            "other" -> get("title").ifEmpty { "Document" }
-            "council" -> get("council").ifEmpty { type.abbr }
-            else -> type.abbr
+        get() = get("title").ifEmpty {
+            when (type.key) {
+                "other" -> "Document"
+                "council" -> get("council").ifEmpty { type.abbr }
+                else -> type.abbr
+            }
         }
 
     val primaryField: FieldDef? get() = type.fields.firstOrNull { it.primary }

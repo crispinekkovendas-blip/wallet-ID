@@ -83,6 +83,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
+    implementation("com.google.zxing:core:3.5.3")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 

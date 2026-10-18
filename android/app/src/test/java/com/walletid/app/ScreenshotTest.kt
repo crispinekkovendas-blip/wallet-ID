@@ -4,31 +4,35 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Shader
+import android.graphics.Typeface
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.walletid.app.data.Doc
+import com.walletid.app.data.Qr
 import com.walletid.app.data.Side
-import com.walletid.app.ui.DetailScreen
+import com.walletid.app.ui.CardScreen
 import com.walletid.app.ui.EditScreen
 import com.walletid.app.ui.LockScreen
-import com.walletid.app.ui.PickerScreen
 import com.walletid.app.ui.SettingsScreen
 import com.walletid.app.ui.WalletScreen
 import com.walletid.app.ui.WalletTheme
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
-import java.time.LocalDate
 
-/** Renders every screen with sample (fake) data so the design can be reviewed without a phone. */
+/** Renders every screen with fake sample cards so the design can be reviewed without a phone. */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w393dp-h852dp-xhdpi")
@@ -42,45 +46,91 @@ class ScreenshotTest {
         compose.onRoot().captureRoboImage(File(dir, "$name.png").absolutePath)
     }
 
-    private val today = LocalDate.now()
     private val docs = listOf(
-        Doc("rg", mapOf("type" to "rg", "holder" to "Maria Silva Santos", "number" to "12.345.678-9", "issuer" to "SSP", "uf" to "SP",
-            "cpf" to "123.456.789-01", "birth" to "1990-04-12", "issued" to "2018-03-02")),
-        Doc("cnh", mapOf("type" to "cnh", "holder" to "Maria Silva Santos", "number" to "01234567890", "category" to "AB",
-            "cpf" to "123.456.789-01", "expires" to today.plusDays(63).toString(), "issuer" to "DETRAN-SP")),
-        Doc("creci", mapOf("type" to "creci", "holder" to "Maria Silva Santos", "number" to "123456-F", "region" to "CRECI-SP · 2ª Região",
-            "kind" to "Pessoa Física", "expires" to today.plusYears(1).toString())),
-        Doc("pass", mapOf("type" to "passport", "holder" to "Maria Silva Santos", "number" to "FX123456", "country" to "Brasil",
-            "expires" to today.plusYears(5).toString())),
+        Doc("rg", mapOf("type" to "rg", "title" to "RG")),
+        Doc("cnh", mapOf("type" to "cnh", "title" to "CNH", "qr" to SAMPLE_QR)),
+        Doc("creci", mapOf("type" to "creci", "title" to "CRECI")),
+        Doc("sus", mapOf("type" to "sus", "title" to "Cartão SUS")),
     )
 
-    private fun samplePhoto() = Bitmap.createBitmap(856, 540, Bitmap.Config.ARGB_8888).apply {
-        val c = Canvas(this)
-        c.drawPaint(Paint().apply { shader = LinearGradient(0f, 0f, 856f, 540f, 0xFF1D5A2C.toInt(), 0xFF7FB238.toInt(), Shader.TileMode.CLAMP) })
-        c.drawText("SAMPLE PHOTO", 40f, 90f, Paint().apply { color = -1; textSize = 48f })
-    }.asImageBitmap()
+    /** A fake ID card photo: coloured card, header, photo box and text lines. */
+    private fun fakeCard(c1: Int, c2: Int, header: String, sub: String, withQr: Boolean = false): Bitmap {
+        val w = 1000
+        val h = 630
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.drawPaint(Paint().apply { shader = LinearGradient(0f, 0f, w.toFloat(), h.toFloat(), c1, c2, Shader.TileMode.CLAMP) })
+        val white = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = -1 }
+        val faint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x66FFFFFF }
+        c.drawText(header, 48f, 92f, Paint(white).apply { textSize = 56f; typeface = Typeface.DEFAULT_BOLD })
+        c.drawText(sub, 48f, 136f, Paint(white).apply { textSize = 26f; alpha = 210 })
+        c.drawText("REPÚBLICA FEDERATIVA DO BRASIL", 560f, 70f, Paint(white).apply { textSize = 20f; alpha = 200 })
+        if (withQr) {
+            val qr = Qr.toBitmap(Qr.encode(SAMPLE_QR, 330))
+            c.drawRoundRect(RectF(620f, 220f, 960f, 560f), 12f, 12f, white)
+            c.drawBitmap(qr, null, RectF(625f, 225f, 955f, 555f), null)
+        } else {
+            c.drawRoundRect(RectF(48f, 190f, 288f, 500f), 16f, 16f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x55FFFFFF })
+            c.drawCircle(168f, 300f, 60f, faint)
+            c.drawRoundRect(RectF(88f, 380f, 248f, 500f), 60f, 60f, faint)
+        }
+        val x = if (withQr) 48f else 330f
+        for (i in 0 until 5) {
+            c.drawRoundRect(RectF(x, 200f + i * 70f, x + 260f, 216f + i * 70f), 8f, 8f, faint)
+            c.drawRoundRect(RectF(x, 226f + i * 70f, x + 200f + (i % 3) * 40f, 250f + i * 70f), 8f, 8f, white)
+        }
+        return bmp
+    }
+
+    private val green = fakeCard(0xFF1D5A2C.toInt(), 0xFF7FB238.toInt(), "CNH", "Carteira Nacional de Habilitação")
+    private val greenBack = fakeCard(0xFF2D6B3A.toInt(), 0xFF9CC25A.toInt(), "VERSO", "Observações · QR Code", withQr = true)
+    private val thumbs: Map<String, ImageBitmap?> = mapOf(
+        "rg" to fakeCard(0xFF0F5C4A.toInt(), 0xFF2A9D7C.toInt(), "RG", "Carteira de Identidade").asImageBitmap(),
+        "cnh" to green.asImageBitmap(),
+        "creci" to fakeCard(0xFF151A2E.toInt(), 0xFF3A3F63.toInt(), "CRECI", "Conselho Regional de Corretores de Imóveis").asImageBitmap(),
+        "sus" to fakeCard(0xFF08506B.toInt(), 0xFF1A97B8.toInt(), "SUS", "Cartão Nacional de Saúde").asImageBitmap(),
+    )
 
     @Test fun lock() = shot("01-lock") { LockScreen(true, null, {}, {}) }
 
-    @Test fun walletEmpty() = shot("02-wallet-empty") { WalletScreen(emptyList(), 0, "", {}, {}, {}, {}, {}) }
+    @Test fun walletEmpty() = shot("02-wallet-empty") { WalletScreen(emptyList(), emptyMap(), 0, "", {}, {}, {}, {}, {}) }
 
-    @Test fun wallet() = shot("03-wallet") { WalletScreen(docs, docs.size, "", {}, {}, {}, {}, {}) }
+    @Test fun wallet() = shot("03-wallet") { WalletScreen(docs, thumbs, docs.size, "", {}, {}, {}, {}, {}) }
 
-    @Test fun picker() = shot("04-picker") { PickerScreen({}, {}) }
-
-    @Test fun detail() = shot("05-detail-cnh") {
-        DetailScreen(docs[1], false, samplePhoto(), null, {}, {}, {}, { _, _ -> }, {}, {}, {})
+    private fun card(name: String, flipped: Boolean, showQr: Boolean) = shot(name) {
+        CardScreen(
+            doc = docs[1], front = green.asImageBitmap(), back = greenBack.asImageBitmap(),
+            hasQr = true, qr = Qr.toBitmap(Qr.encode(SAMPLE_QR)).asImageBitmap(), showQr = showQr,
+            flipped = flipped, onFlip = {}, onShowQr = {}, onBack = {}, onEdit = {}, onShare = {}, onDelete = {},
+        )
     }
 
-    @Test fun detailRevealed() = shot("06-detail-rg-revealed") {
-        DetailScreen(docs[0], true, null, null, {}, {}, {}, { _, _ -> }, {}, {}, {})
+    @Test fun cardFront() = card("04-card-front", flipped = false, showQr = false)
+
+    @Test fun cardBack() = card("05-card-back", flipped = true, showQr = false)
+
+    @Test fun cardQr() = card("06-card-qr", flipped = false, showQr = true)
+
+    @Test fun addEmpty() = shot("07-add-card") {
+        EditScreen(EditSession(null, "other", emptyMap()), {}, {}, {}, {}, {}, { _, _ -> }, {}, {})
     }
 
-    @Test fun edit() {
-        val session = EditSession(null, "creci", mapOf("holder" to "Maria Silva Santos", "number" to "123456-F", "region" to "CRECI-SP · 2ª Região"))
-        session.previews[Side.FRONT] = samplePhoto()
-        shot("07-edit-creci") { EditScreen(session, {}, {}, {}, {}, {}) }
+    @Test fun addFilled() {
+        val session = EditSession(null, "cnh", mapOf("title" to "CNH", "qr" to SAMPLE_QR))
+        session.previews[Side.FRONT] = green.asImageBitmap()
+        session.previews[Side.BACK] = greenBack.asImageBitmap()
+        shot("08-add-card-filled") { EditScreen(session, {}, {}, {}, {}, {}, { _, _ -> }, {}, {}) }
     }
 
-    @Test fun settings() = shot("08-settings") { SettingsScreen(0, "1.0.1", {}, {}, {}, {}, {}) }
+    @Test fun settings() = shot("09-settings") { SettingsScreen(0, "1.0.3", {}, {}, {}, {}, {}) }
+
+    @Test fun findsQrPrintedOnTheBackPhoto() {
+        val found = Qr.find(greenBack)
+        assertNotNull("QR code on the fake verso should be detected", found)
+        assertEquals(SAMPLE_QR, found!!.text)
+    }
+
+    companion object {
+        const val SAMPLE_QR = "https://example.com/validate?doc=CNH-SAMPLE-0001"
+    }
 }
