@@ -1,4 +1,4 @@
-# ID Vault
+# Wallet ID
 
 A private, offline wallet for your digital IDs: passports, driver's licenses, national IDs, visas, insurance cards and more.
 Add a screenshot or photo of each ID, plus its details, and everything is stored **encrypted on your own device**.
@@ -18,7 +18,29 @@ Add a screenshot or photo of each ID, plus its details, and everything is stored
 - 💾 **Encrypted backup** export and import between devices.
 - 📱 **Installable PWA** that works fully offline. The Content-Security-Policy blocks all outside connections, and fonts are bundled locally.
 
-## Use it
+## 📱 Android app (native, Kotlin)
+
+The `android/` folder is a native Android app built with Kotlin and Jetpack Compose. It has the same wallet design and document types as the web version.
+
+**Install:** on your Android phone, open the [latest release](../../releases/latest), download the `WalletID-….apk` file, open it and tap **Install**. The first time, Android asks you to allow installing apps from your browser.
+
+- 🔓 Unlock with **fingerprint, face or your phone PIN**.
+- 🔐 Documents and photos are encrypted with **AES-256-GCM** using a key held in the phone's **Android Keystore** (secure hardware on most phones).
+- 🚫 The app has **no internet permission**, blocks **screenshots** and the recent-apps preview, and is excluded from cloud backup.
+- 🔒 **Auto-locks** when you leave it (immediately, after 1 minute or after 5 minutes).
+- 💾 **Encrypted backups** (`.idvault`) work in both directions between the Android app and the web app.
+
+Every push to `main` that changes `android/` runs the tests and builds a new APK on GitHub Actions, then publishes it as a release.
+
+### Signing key (for smooth updates)
+
+Android only installs an update over an existing app when both are signed with the same key. Until a key is set up, each build is signed with a temporary key. To install a newer build, first **export a backup**, uninstall the old app, install the new one, then import the backup.
+
+To fix this permanently, add these repository secrets (Settings → Secrets and variables → Actions): `SIGNING_KEYSTORE_BASE64`, `SIGNING_STORE_PASSWORD`, `SIGNING_KEY_ALIAS`, `SIGNING_KEY_PASSWORD`. Never commit the key itself; this repository is public.
+
+To build it yourself, open `android/` in Android Studio, or run `./gradlew assembleDebug`.
+
+## Use the web app
 
 1. Open the GitHub Pages site for this repo (Settings → Pages shows the URL).
 2. On your phone: **Share → Add to Home Screen** (iOS Safari) or **Install app** (Android Chrome).
