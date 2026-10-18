@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 108dp adaptive icon foreground: two stacked ID cards with a gold chip. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:pivotX="54" android:pivotY="50" android:rotation="-8">
+        <path android:pathData="M34,34h40a6,6 0 0 1 6,6v24a6,6 0 0 1 -6,6h-40a6,6 0 0 1 -6,-6v-24a6,6 0 0 1 6,-6z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="28" android:startY="34" android:endX="80" android:endY="70">
+                    <item android:offset="0" android:color="#FF0F5C4A" />
+                    <item android:offset="1" android:color="#FF2A9D7C" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+    <path android:pathData="M34,44h40a6,6 0 0 1 6,6v24a6,6 0 0 1 -6,6h-40a6,6 0 0 1 -6,-6v-24a6,6 0 0 1 6,-6z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="28" android:startY="44" android:endX="80" android:endY="80">
+                <item android:offset="0" android:color="#FF5B8CFF" />
+                <item android:offset="1" android:color="#FF8A6BFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#FFE7C77F" android:pathData="M36,52h9a2,2 0 0 1 2,2v6a2,2 0 0 1 -2,2h-9a2,2 0 0 1 -2,-2v-6a2,2 0 0 1 2,-2z" />
+    <path android:fillColor="#E6FFFFFF" android:pathData="M36,67h24a1.5,1.5 0 0 1 0,3h-24a1.5,1.5 0 0 1 0,-3z" />
+    <path android:fillColor="#80FFFFFF" android:pathData="M36,73h15a1,1 0 0 1 0,2h-15a1,1 0 0 1 0,-2z" />
+</vector>

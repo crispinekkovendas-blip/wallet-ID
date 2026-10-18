@@ -1,0 +1,90 @@
+name: Android app
+
+on:
+  push:
+    branches: [main]
+    paths: ['android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Optional: a private signing key stored as repository secrets keeps updates installable
+      # over each other. Without it the APK is signed with a throwaway debug key.
+      - name: Load signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "SIGNING_STORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+            echo "Release signing key found."
+          else
+            echo "::warning::No SIGNING_KEYSTORE_BASE64 secret; building with a debug key."
+          fi
+
+      - name: Test and build
+        env:
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: ./gradlew --stacktrace testDebugUnitTest assembleRelease
+
+      - name: Name the APK
+        run: cp app/build/outputs/apk/release/app-release.apk "WalletID-1.0.${BUILD_NUMBER}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WalletID-apk
+          path: android/WalletID-*.apk
+
+      - name: Publish release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v1.0.${{ github.run_number }}
+          name: Wallet ID for Android 1.0.${{ github.run_number }}
+          make_latest: true
+          files: android/WalletID-*.apk
+          body: |
+            Download **WalletID-1.0.${{ github.run_number }}.apk** below on your Android phone, open it and tap Install
+            (allow "Install unknown apps" for your browser when asked).
+
+            Before installing an update, export a backup in Settings → Export encrypted backup.
+
+      - name: Publish screen previews
+        if: always()
+        working-directory: .
+        run: |
+          [ -d android/screenshots ] || exit 0
+          rm -rf /tmp/shots && mkdir /tmp/shots && cp android/screenshots/*.png /tmp/shots/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan screenshots
+          git rm -rfq . && git clean -fdxq
+          cp /tmp/shots/*.png .
+          git add -f *.png
+          git commit -qm "Screen previews from build ${BUILD_NUMBER}"
+          git push -f origin screenshots
