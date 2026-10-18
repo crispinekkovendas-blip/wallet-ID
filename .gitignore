@@ -1,0 +1,11 @@
+# Never commit personal ID images or vault backups to this public repo.
+*.jpg
+*.jpeg
+*.heic
+*.webp
+*.idvault
+screenshots/
+# App icons are the only images allowed.
+*.png
+!icon-192.png
+!icon-512.png
