@@ -1,0 +1,12 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.kotlin/
+captures/
+# Signing keys must never be committed (this repo is public).
+*.jks
+*.keystore
+signing.properties
+screenshots/

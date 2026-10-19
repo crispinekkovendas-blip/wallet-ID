@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.Prenatal" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+    <color name="bg">#FFF8F5</color>
+    <color name="launcher_bg">#FFE4EA</color>
+</resources>

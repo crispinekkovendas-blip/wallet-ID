@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A heart cradling a small moon-shaped bump. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:pathData="M54,78C54,78 30,63 30,46C30,37 37,31 44.5,31C49,31 52.5,33.5 54,37C55.5,33.5 59,31 63.5,31C71,31 78,37 78,46C78,63 54,78 54,78Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="30" android:startY="31" android:endX="78" android:endY="78">
+                <item android:offset="0" android:color="#FFF28CA5" />
+                <item android:offset="1" android:color="#FFD9577A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#FFFFF6EE" android:fillType="evenOdd" android:pathData="M54,44a8,8 0 1,1 -0.1,0zM58,47a6,6 0 1,0 -0.1,0z" />
+</vector>
