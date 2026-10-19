@@ -291,7 +291,12 @@ fun PortraitCard(
                         IdCard(doc, Modifier.align(Alignment.Center))
                     }
                 } else {
-                    Box(Modifier.fillMaxSize().graphicsLayer { rotationY = 180f }, contentAlignment = Alignment.Center) {
+                    // Undo the mirror from the flip. Inside the turned card the screen's vertical axis is
+                    // the card's own horizontal one, so counter-rotate around X when turned, Y otherwise.
+                    Box(
+                        Modifier.fillMaxSize().graphicsLayer { if (landscape) rotationX = 180f else rotationY = 180f },
+                        contentAlignment = Alignment.Center,
+                    ) {
                         if (back != null) {
                             Image(
                                 back, "Back of ${doc.title}",
