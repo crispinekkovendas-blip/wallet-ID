@@ -11,11 +11,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onRoot
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.unit.dp
 import com.walletid.app.ui.QrCodeView
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -145,7 +143,11 @@ class ScreenshotTest {
         val code = Qr.encode(DENSE_QR)
         compose.setContent { QrCodeView(code, Modifier.size(260.dp)) }
         compose.waitForIdle()
-        val img = compose.onRoot().captureToImage().asAndroidBitmap()
+        // Robolectric can't use Compose's captureToImage (it times out); capture with Roborazzi and read the PNG back.
+        val file = File(dir, "qr-scan-check.png")
+        compose.onRoot().captureRoboImage(file.absolutePath)
+        val img = android.graphics.BitmapFactory.decodeFile(file.absolutePath)
+        file.delete()
         val px = IntArray(img.width * img.height)
         img.getPixels(px, 0, img.width, 0, 0, img.width, img.height)
         val read = Qr.read(px, img.width, img.height)
