@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.DocumentScanner
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Fingerprint
@@ -176,6 +177,7 @@ fun HomeScreen(
     onAddResult: () -> Unit,
     onAddMeasurement: () -> Unit,
     onSeeSchedule: () -> Unit,
+    onScan: () -> Unit = {},
 ) {
     val upcoming = events.filter { !it.done && it.at.isAfter(now.minusHours(2)) }.sortedBy { it.at }
     val dueNow = Protocol.items.filter { Protocol.status(it, g.weeks, events, skipped) in setOf(ProtocolStatus.DUE_NOW, ProtocolStatus.OVERDUE) }
@@ -234,10 +236,11 @@ fun HomeScreen(
 
         // Quick actions
         Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            QuickAction("Appointment", Icons.Rounded.Event, P.Rose, onAddEvent, Modifier.weight(1f))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            QuickAction("Scan", Icons.Rounded.DocumentScanner, P.RoseDeep, onScan, Modifier.weight(1f))
+            QuickAction("Visit", Icons.Rounded.Event, P.Rose, onAddEvent, Modifier.weight(1f))
             QuickAction("Result", Icons.Rounded.Science, P.Sky, onAddResult, Modifier.weight(1f))
-            QuickAction("Weight / BP", Icons.Rounded.MonitorWeight, P.Mint, onAddMeasurement, Modifier.weight(1f))
+            QuickAction("Weight", Icons.Rounded.MonitorWeight, P.Mint, onAddMeasurement, Modifier.weight(1f))
         }
 
         SectionHeader("Coming up", action = { TextAction("See all", onSeeSchedule, strong = true) })

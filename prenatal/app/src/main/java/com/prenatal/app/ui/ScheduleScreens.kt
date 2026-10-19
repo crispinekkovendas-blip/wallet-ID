@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.EventAvailable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,6 +32,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +50,8 @@ import com.prenatal.app.data.Gestation
 import com.prenatal.app.data.Protocol
 import com.prenatal.app.data.ProtocolItem
 import com.prenatal.app.data.ProtocolStatus
+import com.prenatal.app.ocr.Scan
+import com.prenatal.app.ocr.ScannedAppointment
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -185,6 +189,10 @@ fun EventEditScreen(
     onSave: (Event) -> Unit,
     onDelete: () -> Unit,
     onAddResult: () -> Unit,
+    scan: Scan<ScannedAppointment>? = null,
+    onScanCamera: () -> Unit = {},
+    onScanGallery: () -> Unit = {},
+    onAddToCalendar: (Event) -> Unit = {},
 ) {
     var kind by remember { mutableStateOf(initial.kind) }
     var title by remember { mutableStateOf(initial.title) }
@@ -195,21 +203,40 @@ fun EventEditScreen(
     var notes by remember { mutableStateOf(initial.notes) }
     var done by remember { mutableStateOf(initial.done) }
     var remind by remember { mutableStateOf(initial.remind) }
+    var protocolKey by remember { mutableStateOf(initial.protocolKey) }
     var confirmDelete by remember { mutableStateOf(false) }
+
+    // Fill the form from a scanned slip or message; the user reviews before saving.
+    LaunchedEffect(scan?.stamp) {
+        val d = scan?.draft ?: return@LaunchedEffect
+        kind = d.kind
+        if (title.isBlank() || isNew) title = d.title
+        d.date?.let { date = it }
+        d.time?.let { time = it }
+        if (d.place.isNotBlank()) place = d.place
+        if (d.professional.isNotBlank()) pro = d.professional
+        if (d.notes.isNotBlank() && !notes.contains(d.notes)) notes = listOf(notes, d.notes).filter { it.isNotBlank() }.joinToString("\n")
+        d.protocolKey?.let { protocolKey = it }
+    }
+    fun current() = initial.copy(kind = kind, title = title.trim().ifEmpty { kind.label }, at = date.atTime(time),
+        place = place.trim(), professional = pro.trim(), notes = notes.trim(), done = done, remind = remind, protocolKey = protocolKey)
 
     Column(Modifier.fillMaxSize().background(P.Bg).imePadding()) {
         TopBar(
             if (isNew) "New ${kind.label.lowercase()}" else kind.label,
             left = { TextAction("Cancel", onCancel) },
             right = {
-                TextAction("Save", {
-                    onSave(initial.copy(kind = kind, title = title.trim().ifEmpty { kind.label }, at = date.atTime(time),
-                        place = place.trim(), professional = pro.trim(), notes = notes.trim(), done = done, remind = remind))
-                }, strong = true)
+                TextAction("Save", { onSave(current()) }, strong = true)
             },
         )
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 20.dp)) {
             Spacer(Modifier.height(16.dp))
+            ScanCard("Fill from a photo", "Appointment slip, exam request or a screenshot of the message", onScanCamera, onScanGallery)
+            if (scan != null) {
+                Spacer(Modifier.height(10.dp))
+                RecognizedText(scan.text)
+            }
+            Spacer(Modifier.height(14.dp))
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 EventKind.entries.forEach { k ->
                     val c = P.kindColor(k)
@@ -248,14 +275,28 @@ fun EventEditScreen(
                 FormDivider()
                 FormField("Notes", notes, { notes = it }, "Questions to ask, preparation (fasting…)", multiline = true)
             }
+            Protocol.get(protocolKey)?.let { item ->
+                Spacer(Modifier.height(10.dp))
+                Chip("Counts as: ${item.title}", P.RoseDeep, Modifier.padding(start = 4.dp))
+            }
             Spacer(Modifier.height(14.dp))
             FormGroup {
                 SwitchRow("Remind me", "The day before at 9:00 and 2 hours before", remind) { remind = it }
                 FormDivider()
                 SwitchRow("Done", "Mark when the visit or exam has happened", done) { done = it }
             }
+            Spacer(Modifier.height(14.dp))
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(P.Surface).border(1.dp, P.Line, RoundedCornerShape(16.dp))
+                    .clickable { onAddToCalendar(current()) }.padding(14.dp),
+                horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.EventAvailable, null, tint = P.Rose)
+                Spacer(Modifier.width(8.dp))
+                Text("Add to phone calendar", color = P.Text, fontWeight = FontWeight.SemiBold)
+            }
             if (!isNew) {
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(10.dp))
                 PrimaryButton("Add a result for this", onAddResult, Modifier.fillMaxWidth())
                 Spacer(Modifier.height(10.dp))
                 Row(

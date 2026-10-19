@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.Matrix
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
@@ -17,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.content.FileProvider
+import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.prenatal.app.data.Attachment
@@ -31,6 +33,11 @@ import com.prenatal.app.data.Profile
 import com.prenatal.app.data.Result
 import com.prenatal.app.data.Store
 import com.prenatal.app.data.WrongPassphraseException
+import com.prenatal.app.ocr.OcrParser
+import com.prenatal.app.ocr.Scan
+import com.prenatal.app.ocr.ScannedAppointment
+import com.prenatal.app.ocr.ScannedResult
+import com.prenatal.app.ocr.TextScanner
 import com.prenatal.app.reminders.Reminders
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -225,6 +232,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         var bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
         val scale = 2400f / max(bmp.width, bmp.height)
         if (scale < 1f) bmp = Bitmap.createScaledBitmap(bmp, (bmp.width * scale).roundToInt(), (bmp.height * scale).roundToInt(), true)
+        // Re-encoding drops EXIF, so turn camera photos upright now.
+        val rotation = runCatching { ExifInterface(bytes.inputStream()).rotationDegrees }.getOrDefault(0)
+        if (rotation != 0) bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, Matrix().apply { postRotate(rotation.toFloat()) }, true)
         return ByteArrayOutputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 92, it); it.toByteArray() }
     }
 
@@ -264,6 +274,59 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun thumbnail(a: Attachment): ImageBitmap? = renderAttachment(a).firstOrNull()
+
+    // ---------- Scanning (OCR) ----------
+
+    var scannedResult by mutableStateOf<Scan<ScannedResult>?>(null)
+        private set
+    var scannedAppointment by mutableStateOf<Scan<ScannedAppointment>?>(null)
+        private set
+
+    fun clearScans() {
+        scannedResult = null
+        scannedAppointment = null
+    }
+
+    /** Reads a photo of a lab or ultrasound report; the photo is attached to the result too. */
+    fun scanResult(uri: Uri, onAttachment: (Attachment) -> Unit) {
+        viewModelScope.launch {
+            busy = "Reading the report…"
+            try {
+                val attachment = readPicked(uri) ?: return@launch
+                val rows = withContext(Dispatchers.Default) { TextScanner.readRows(pendingFiles.getValue(attachment.id)) }
+                onAttachment(attachment)
+                if (rows.isEmpty()) return@launch say("No text found. Try a sharper, well-lit photo.")
+                val draft = withContext(Dispatchers.Default) { OcrParser.parseResult(rows) }
+                scannedResult = Scan(draft, rows.joinToString("\n"))
+                say(if (draft.values.isEmpty()) "Text read. Check the recognized text below." else "Found ${draft.values.size} value${if (draft.values.size == 1) "" else "s"}. Please check them.")
+            } catch (e: Exception) {
+                say("Couldn’t read the photo: ${e.message}")
+            } finally {
+                busy = null
+            }
+        }
+    }
+
+    /** Reads a photo or screenshot of an appointment slip, exam request or message. */
+    fun scanAppointment(uri: Uri) {
+        viewModelScope.launch {
+            busy = "Reading…"
+            try {
+                val bytes = withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                } ?: return@launch
+                val rows = withContext(Dispatchers.Default) { TextScanner.readRows(bytes) }
+                if (rows.isEmpty()) return@launch say("No text found. Try a sharper, well-lit photo.")
+                val draft = withContext(Dispatchers.Default) { OcrParser.parseAppointment(rows) }
+                scannedAppointment = Scan(draft, rows.joinToString("\n"))
+                say(if (draft.date != null) "Filled in from the photo. Please check it." else "Text read, but no date found. Please fill it in.")
+            } catch (e: Exception) {
+                say("Couldn’t read the photo: ${e.message}")
+            } finally {
+                busy = null
+            }
+        }
+    }
 
     // ---------- Share ----------
 

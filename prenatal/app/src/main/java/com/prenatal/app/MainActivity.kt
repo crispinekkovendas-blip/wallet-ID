@@ -1,12 +1,14 @@
 package com.prenatal.app
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import android.provider.CalendarContract
 import android.provider.Settings
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -82,12 +84,14 @@ import com.prenatal.app.ui.ProtocolDialog
 import com.prenatal.app.ui.ResultEditScreen
 import com.prenatal.app.ui.ResultViewScreen
 import com.prenatal.app.ui.ResultsScreen
+import com.prenatal.app.ui.ScanChooser
 import com.prenatal.app.ui.ScheduleScreen
 import com.prenatal.app.ui.SetupScreen
 import com.prenatal.app.ui.draftEvent
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.ZoneId
 
 class MainActivity : FragmentActivity() {
     private val vm: AppViewModel by viewModels()
@@ -110,6 +114,7 @@ class MainActivity : FragmentActivity() {
                     onUnlock = ::authenticate,
                     onOpenSecuritySettings = { startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) },
                     onShare = ::share,
+                    onAddToCalendar = ::addToCalendar,
                     needsNotificationPermission = {
                         Build.VERSION.SDK_INT >= 33 &&
                             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -172,6 +177,24 @@ class MainActivity : FragmentActivity() {
         )
     }
 
+    /** Opens the phone's calendar with the appointment filled in, ready to save there too. */
+    private fun addToCalendar(e: Event) {
+        val start = e.at.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val intent = Intent(Intent.ACTION_INSERT).setData(CalendarContract.Events.CONTENT_URI)
+            .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, start)
+            .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, start + 60 * 60 * 1000L)
+            .putExtra(CalendarContract.Events.TITLE, e.title)
+            .putExtra(CalendarContract.Events.EVENT_LOCATION, e.place)
+            .putExtra(CalendarContract.Events.DESCRIPTION, listOf(e.professional, e.notes).filter { it.isNotBlank() }.joinToString("\n"))
+        vm.externalActivity = true
+        try {
+            startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            vm.externalActivity = false
+            vm.say("No calendar app found on this phone")
+        }
+    }
+
     private fun share(uri: Uri) {
         val send = Intent(Intent.ACTION_SEND).apply {
             type = contentResolver.getType(uri) ?: "*/*"
@@ -191,6 +214,7 @@ private fun AppRoot(
     onUnlock: () -> Unit,
     onOpenSecuritySettings: () -> Unit,
     onShare: (Uri) -> Unit,
+    onAddToCalendar: (Event) -> Unit,
     needsNotificationPermission: () -> Boolean,
 ) {
     val snackbar = remember { SnackbarHostState() }
@@ -204,6 +228,14 @@ private fun AppRoot(
     var askErase by remember { mutableStateOf(false) }
     val newAttachments = remember { mutableStateListOf<Attachment>() }
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
+    var scanChooser by remember { mutableStateOf(false) }
+    var scanForResult by remember { mutableStateOf(true) }
+    var scanCameraUri by remember { mutableStateOf<Uri?>(null) }
+
+    fun scanPicked(uri: Uri?) {
+        if (uri == null) return
+        if (scanForResult) vm.scanResult(uri) { newAttachments.add(it) } else vm.scanAppointment(uri)
+    }
 
     fun addPicked(uri: Uri?) {
         if (uri == null) return
@@ -213,6 +245,33 @@ private fun AppRoot(
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { addPicked(it) }
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { addPicked(it) }
     val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> if (ok) addPicked(cameraUri) }
+    val scanCamera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok -> if (ok) scanPicked(scanCameraUri) }
+    val scanGallery = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { scanPicked(it) }
+
+    /** Photograph or pick a document to read; [forResult] picks how it's interpreted. */
+    fun startScan(forResult: Boolean, camera: Boolean) {
+        scanForResult = forResult
+        vm.externalActivity = true
+        if (camera) {
+            val uri = vm.newCameraUri()
+            scanCameraUri = uri
+            scanCamera.launch(uri)
+        } else {
+            scanGallery.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        }
+    }
+
+    fun openNewResult() {
+        newAttachments.clear()
+        vm.clearScans()
+        vm.open(Screen.EditResult(null))
+    }
+
+    fun openEvent(id: String?, protocolKey: String? = null) {
+        vm.clearScans()
+        vm.open(Screen.EditEvent(id, protocolKey))
+    }
+
     val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) vm.say("Reminders are off. You can allow notifications in the phone’s settings.")
     }
@@ -250,23 +309,24 @@ private fun AppRoot(
                             when (vm.tab) {
                                 Tab.HOME -> HomeScreen(
                                     g!!, data.profile.motherName, data.profile.babyName, data.events, data.skippedProtocol, now,
-                                    onOpenEvent = { vm.open(Screen.EditEvent(it)) },
+                                    onOpenEvent = { openEvent(it) },
                                     onOpenProtocol = { protocolOpen = it },
-                                    onAddEvent = { vm.open(Screen.EditEvent(null)) },
-                                    onAddResult = { newAttachments.clear(); vm.open(Screen.EditResult(null)) },
+                                    onAddEvent = { openEvent(null) },
+                                    onAddResult = { openNewResult() },
                                     onAddMeasurement = { vm.open(Screen.EditMeasurement(null)) },
                                     onSeeSchedule = { vm.tab = Tab.SCHEDULE },
+                                    onScan = { scanChooser = true },
                                 )
                                 Tab.SCHEDULE -> ScheduleScreen(
                                     g, data.events, data.skippedProtocol, now,
-                                    onOpenEvent = { vm.open(Screen.EditEvent(it)) },
+                                    onOpenEvent = { openEvent(it) },
                                     onOpenProtocol = { protocolOpen = it },
-                                    onAdd = { vm.open(Screen.EditEvent(null)) },
+                                    onAdd = { openEvent(null) },
                                 )
                                 Tab.RESULTS -> ResultsScreen(
                                     data.results, g?.dueDate, { vm.thumbnail(it) },
                                     onOpen = { vm.open(Screen.ViewResult(it)) },
-                                    onAdd = { newAttachments.clear(); vm.open(Screen.EditResult(null)) },
+                                    onAdd = { openNewResult() },
                                 )
                                 Tab.HEALTH -> HealthScreen(
                                     data.measurements, g?.dueDate,
@@ -298,10 +358,13 @@ private fun AppRoot(
                             onSave = ::saveEvent,
                             onDelete = { vm.deleteEvent(initial.id); vm.back() },
                             onAddResult = {
-                                newAttachments.clear()
                                 vm.back()
-                                vm.open(Screen.EditResult(null))
+                                openNewResult()
                             },
+                            scan = vm.scannedAppointment,
+                            onScanCamera = { startScan(forResult = false, camera = true) },
+                            onScanGallery = { startScan(forResult = false, camera = false) },
+                            onAddToCalendar = onAddToCalendar,
                         )
                     }
                     is Screen.EditResult -> {
@@ -329,13 +392,16 @@ private fun AppRoot(
                                 newAttachments.clear()
                                 vm.back()
                             },
+                            scan = vm.scannedResult,
+                            onScanCamera = { startScan(forResult = true, camera = true) },
+                            onScanGallery = { startScan(forResult = true, camera = false) },
                         )
                     }
                     is Screen.ViewResult -> data.results.firstOrNull { it.id == s.id }?.let { r ->
                         ResultViewScreen(
                             r, g?.dueDate, { vm.thumbnail(it) },
                             onBack = { vm.back() },
-                            onEdit = { newAttachments.clear(); vm.open(Screen.EditResult(r.id)) },
+                            onEdit = { newAttachments.clear(); vm.clearScans(); vm.open(Screen.EditResult(r.id)) },
                             onOpenAttachment = { vm.open(Screen.ViewAttachment(it)) },
                             onDelete = { vm.deleteResult(r.id); vm.back() },
                         )
@@ -374,7 +440,7 @@ private fun AppRoot(
             item, status, vm.gestation,
             onSchedule = {
                 protocolOpen = null
-                vm.open(Screen.EditEvent(null, item.key))
+                openEvent(null, item.key)
             },
             onDoneToday = {
                 protocolOpen = null
@@ -409,6 +475,21 @@ private fun AppRoot(
                 vm.importBackup(uri, pass)
             },
             onDismiss = { importUri = null },
+        )
+    }
+    if (scanChooser) {
+        ScanChooser(
+            onResult = { camera ->
+                scanChooser = false
+                openNewResult()
+                startScan(forResult = true, camera = camera)
+            },
+            onAppointment = { camera ->
+                scanChooser = false
+                openEvent(null)
+                startScan(forResult = false, camera = camera)
+            },
+            onDismiss = { scanChooser = false },
         )
     }
     if (askErase) EraseDialog(onConfirm = { askErase = false; vm.eraseAll() }, onDismiss = { askErase = false })

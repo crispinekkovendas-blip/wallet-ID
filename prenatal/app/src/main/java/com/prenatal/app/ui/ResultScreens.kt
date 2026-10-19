@@ -46,6 +46,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -70,6 +71,8 @@ import com.prenatal.app.data.Attachment
 import com.prenatal.app.data.Gestation
 import com.prenatal.app.data.Result
 import com.prenatal.app.data.ResultCategory
+import com.prenatal.app.ocr.Scan
+import com.prenatal.app.ocr.ScannedResult
 
 typealias Thumbs = suspend (Attachment) -> ImageBitmap?
 
@@ -239,6 +242,9 @@ fun ResultEditScreen(
     onPickFile: () -> Unit,
     onCancel: () -> Unit,
     onSave: (Result, removed: List<Attachment>) -> Unit,
+    scan: Scan<ScannedResult>? = null,
+    onScanCamera: () -> Unit = {},
+    onScanGallery: () -> Unit = {},
 ) {
     var title by remember { mutableStateOf(initial.title) }
     var date by remember { mutableStateOf(initial.date) }
@@ -249,6 +255,16 @@ fun ResultEditScreen(
     val removed = remember { mutableStateListOf<Attachment>() }
     var menu by remember { mutableStateOf(false) }
     val all = kept + newAttachments.filter { n -> removed.none { it.id == n.id } }
+
+    // Fill the form from a scanned report; values are added, never silently replaced.
+    LaunchedEffect(scan?.stamp) {
+        val d = scan?.draft ?: return@LaunchedEffect
+        if (title.isBlank()) title = d.title
+        d.date?.let { date = it }
+        category = d.category
+        val newLines = d.values.filterNot { values.contains(it) }
+        if (newLines.isNotEmpty()) values = (values.lines().filter { it.isNotBlank() } + newLines).joinToString("\n")
+    }
 
     Column(Modifier.fillMaxSize().background(P.Bg).imePadding()) {
         TopBar(
@@ -263,6 +279,12 @@ fun ResultEditScreen(
         )
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 20.dp)) {
             Spacer(Modifier.height(16.dp))
+            ScanCard("Scan the report", "Photo of the lab or ultrasound report: values, date and the photo itself", onScanCamera, onScanGallery)
+            if (scan != null) {
+                Spacer(Modifier.height(10.dp))
+                RecognizedText(scan.text)
+            }
+            Spacer(Modifier.height(14.dp))
             Segmented(ResultCategory.entries.map { it.label }, category.ordinal) { category = ResultCategory.entries[it] }
             Spacer(Modifier.height(14.dp))
             FormGroup {

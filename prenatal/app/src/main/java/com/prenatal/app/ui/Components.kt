@@ -25,6 +25,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DocumentScanner
+import androidx.compose.material.icons.rounded.PhotoCamera
+import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
@@ -311,5 +314,82 @@ fun EmptyState(emoji: String, title: String, text: String, modifier: Modifier = 
         Text(title, color = P.Text, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
         Spacer(Modifier.height(4.dp))
         Text(text, color = P.Text2, fontSize = 14.sp, textAlign = TextAlign.Center)
+    }
+}
+
+/** "Fill from a photo": camera or gallery, read on the phone. */
+@Composable
+fun ScanCard(title: String, subtitle: String, onCamera: () -> Unit, onGallery: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(P.HeroBrush)
+            .padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconBubble(Icons.Rounded.DocumentScanner, P.RoseDeep, 44)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, color = P.Text, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, color = P.Text2, fontSize = 13.sp)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            ScanButton("Camera", Icons.Rounded.PhotoCamera, onCamera, Modifier.weight(1f))
+            ScanButton("Gallery", Icons.Rounded.PhotoLibrary, onGallery, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun ScanButton(label: String, icon: ImageVector, onClick: () -> Unit, modifier: Modifier) {
+    Row(
+        modifier.clip(RoundedCornerShape(14.dp)).background(P.Surface).clickable(onClick = onClick).padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = P.RoseDeep, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(label, color = P.Text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+    }
+}
+
+/** The raw text read from the photo, so anything the form missed can be copied. */
+@Composable
+fun RecognizedText(text: String) {
+    var open by remember { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(P.Surface).border(1.dp, P.Line, RoundedCornerShape(18.dp))
+            .clickable { open = !open }.padding(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Recognized text", color = P.Text2, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+            Text(if (open) "Hide" else "Show", color = P.Rose, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        }
+        if (open) {
+            Spacer(Modifier.height(8.dp))
+            androidx.compose.foundation.text.selection.SelectionContainer {
+                Text(text, color = P.Text, fontSize = 13.sp, lineHeight = 18.sp)
+            }
+        }
+    }
+}
+
+/** What to scan, from the Today screen. */
+@Composable
+fun ScanChooser(onResult: (camera: Boolean) -> Unit, onAppointment: (camera: Boolean) -> Unit, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(Modifier.clip(RoundedCornerShape(28.dp)).background(P.Surface).padding(20.dp)) {
+            Text("Scan a document", color = P.Text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("It’s read here on your phone; nothing is uploaded.", color = P.Text2, fontSize = 13.sp)
+            Spacer(Modifier.height(16.dp))
+            ScanCard("Test result", "Lab report or ultrasound: values, date and the photo", { onResult(true) }, { onResult(false) })
+            Spacer(Modifier.height(12.dp))
+            ScanCard("Appointment", "Slip, exam request or WhatsApp message: date, time and place", { onAppointment(true) }, { onAppointment(false) })
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(onClick = onDismiss) { Text("Close") } }
+        }
     }
 }
