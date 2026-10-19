@@ -243,6 +243,7 @@ private fun AppRoot(
                                     takePhoto.launch(uri)
                                 },
                                 onRemovePhoto = vm::removeImage,
+                                onRotatePhoto = vm::rotateImage,
                                 onLabel = vm::setLabel,
                                 onQrFromImage = {
                                     vm.externalActivity = true
@@ -257,13 +258,16 @@ private fun AppRoot(
                             val front by produceState(vm.thumbs[doc.id], doc.id, version) { value = vm.image(doc.id, Side.FRONT, 1800) ?: value }
                             val back by produceState<ImageBitmap?>(null, doc.id, version) { value = vm.image(doc.id, Side.BACK, 1800) }
                             val hasQr = vm.hasQr(doc.id)
-                            val qr by produceState<ImageBitmap?>(null, doc.id, version, hasQr) { value = if (hasQr) vm.qrImage(doc.id) else null }
+                            val qrPicture by produceState<ImageBitmap?>(null, doc.id, version, hasQr) {
+                                value = if (hasQr) vm.image(doc.id, Side.QR, 1600) else null
+                            }
                             CardScreen(
                                 doc = doc,
                                 front = front,
                                 back = back,
                                 hasQr = hasQr,
-                                qr = qr,
+                                qr = vm.qrCode(doc.id),
+                                qrPicture = qrPicture,
                                 showQr = qrFor == doc.id,
                                 flipped = flipped,
                                 onFlip = { flipped = !flipped },

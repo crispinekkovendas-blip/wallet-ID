@@ -15,6 +15,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.walletid.app.data.Doc
+import com.walletid.app.data.Images
 import com.walletid.app.data.Qr
 import com.walletid.app.data.Side
 import com.walletid.app.ui.CardScreen
@@ -25,6 +26,7 @@ import com.walletid.app.ui.WalletScreen
 import com.walletid.app.ui.WalletTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -66,7 +68,7 @@ class ScreenshotTest {
         c.drawText(sub, 48f, 136f, Paint(white).apply { textSize = 26f; alpha = 210 })
         c.drawText("REPÚBLICA FEDERATIVA DO BRASIL", 560f, 70f, Paint(white).apply { textSize = 20f; alpha = 200 })
         if (withQr) {
-            val qr = Qr.toBitmap(Qr.encode(SAMPLE_QR, 330))
+            val qr = Qr.toBitmap(Qr.encode(SAMPLE_QR), scale = 8)
             c.drawRoundRect(RectF(620f, 220f, 960f, 560f), 12f, 12f, white)
             c.drawBitmap(qr, null, RectF(625f, 225f, 955f, 555f), null)
         } else {
@@ -100,7 +102,7 @@ class ScreenshotTest {
     private fun card(name: String, flipped: Boolean, showQr: Boolean) = shot(name) {
         CardScreen(
             doc = docs[1], front = green.asImageBitmap(), back = greenBack.asImageBitmap(),
-            hasQr = true, qr = Qr.toBitmap(Qr.encode(SAMPLE_QR)).asImageBitmap(), showQr = showQr,
+            hasQr = true, qr = Qr.encode(DENSE_QR), qrPicture = null, showQr = showQr,
             flipped = flipped, onFlip = {}, onShowQr = {}, onBack = {}, onEdit = {}, onShare = {}, onDelete = {},
         )
     }
@@ -112,14 +114,15 @@ class ScreenshotTest {
     @Test fun cardQr() = card("06-card-qr", flipped = false, showQr = true)
 
     @Test fun addEmpty() = shot("07-add-card") {
-        EditScreen(EditSession(null, "other", emptyMap()), {}, {}, {}, {}, {}, { _, _ -> }, {}, {})
+        EditScreen(EditSession(null, "other", emptyMap()), {}, {}, {}, {}, {}, {}, { _, _ -> }, {}, {})
     }
 
     @Test fun addFilled() {
-        val session = EditSession(null, "cnh", mapOf("title" to "CNH", "qr" to SAMPLE_QR))
+        val code = Qr.encode(SAMPLE_QR)
+        val session = EditSession(null, "cnh", mapOf("title" to "CNH", "qr" to code.text, "qrModules" to code.serialize()))
         session.previews[Side.FRONT] = green.asImageBitmap()
         session.previews[Side.BACK] = greenBack.asImageBitmap()
-        shot("08-add-card-filled") { EditScreen(session, {}, {}, {}, {}, {}, { _, _ -> }, {}, {}) }
+        shot("08-add-card-filled") { EditScreen(session, {}, {}, {}, {}, {}, {}, { _, _ -> }, {}, {}) }
     }
 
     @Test fun settings() = shot("09-settings") { SettingsScreen(0, "1.0.3", {}, {}, {}, {}, {}) }
@@ -128,9 +131,27 @@ class ScreenshotTest {
         val found = Qr.find(greenBack)
         assertNotNull("QR code on the fake verso should be detected", found)
         assertEquals(SAMPLE_QR, found!!.text)
+        assertTrue(found.sameGridAs(Qr.encode(SAMPLE_QR)))
+    }
+
+    @Test fun portraitScreenshotBecomesTrimmedLandscapeCard() {
+        // A phone screenshot of a sideways card: grey margins around a 1000×630 card, rotated to portrait.
+        val card = fakeCard(0xFF151A2E.toInt(), 0xFF3A3F63.toInt(), "CRECI", "Identidade profissional")
+        val shot = Bitmap.createBitmap(630 + 60, 1000 + 80, Bitmap.Config.ARGB_8888)
+        Canvas(shot).apply {
+            drawColor(0xFFEDEDED.toInt())
+            rotate(90f)
+            drawBitmap(card, 40f, -(630f + 30f), null)
+        }
+        val out = Images.normalize(shot)
+        assertTrue("landscape", out.width > out.height)
+        assertEquals(1000f, out.width.toFloat(), 6f)
+        assertEquals(630f, out.height.toFloat(), 6f)
     }
 
     companion object {
         const val SAMPLE_QR = "https://example.com/validate?doc=CNH-SAMPLE-0001"
+        // Fake payload as long as a real CNH code, to preview how a dense code renders.
+        val DENSE_QR = (0 until 485).map { "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"[(it * 11) % 36] }.joinToString("")
     }
 }

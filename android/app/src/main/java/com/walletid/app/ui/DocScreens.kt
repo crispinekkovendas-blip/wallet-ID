@@ -39,6 +39,7 @@ import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material.icons.rounded.QrCodeScanner
+import androidx.compose.material.icons.rounded.RotateRight
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Shield
@@ -71,7 +72,6 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
@@ -85,7 +85,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.walletid.app.EditSession
 import com.walletid.app.data.Doc
-import com.walletid.app.data.Qr
+import com.walletid.app.data.QrModules
 import com.walletid.app.data.Side
 
 // ---------------------------------------------------------------- Card (expanded)
@@ -96,7 +96,8 @@ fun CardScreen(
     front: ImageBitmap?,
     back: ImageBitmap?,
     hasQr: Boolean,
-    qr: ImageBitmap?,
+    qr: QrModules?,
+    qrPicture: ImageBitmap?,
     showQr: Boolean,
     flipped: Boolean,
     onFlip: () -> Unit,
@@ -167,7 +168,7 @@ fun CardScreen(
                 }
             }
         }
-        if (showQr) QrPanel(doc.title, qr) { onShowQr(false) }
+        if (showQr) QrPanel(doc.title, qr, qrPicture) { onShowQr(false) }
     }
 
     if (confirmDelete) {
@@ -199,6 +200,7 @@ fun EditScreen(
     onChoosePhoto: (Side) -> Unit,
     onTakePhoto: (Side) -> Unit,
     onRemovePhoto: (Side) -> Unit,
+    onRotatePhoto: (Side) -> Unit,
     onLabel: (typeKey: String, title: String) -> Unit,
     onQrFromImage: () -> Unit,
     onQrText: (String) -> Unit,
@@ -221,11 +223,11 @@ fun EditScreen(
         ) {
             SectionTitle("Front")
             PhotoSlot(session.previews[Side.FRONT], "Add the front of the card", "Screenshot or photo",
-                { onChoosePhoto(Side.FRONT) }, { onTakePhoto(Side.FRONT) }, { onRemovePhoto(Side.FRONT) })
+                { onChoosePhoto(Side.FRONT) }, { onTakePhoto(Side.FRONT) }, { onRemovePhoto(Side.FRONT) }, { onRotatePhoto(Side.FRONT) })
 
             SectionTitle("Back (verso)")
             PhotoSlot(session.previews[Side.BACK], "Add the back", "Optional · shown when you flip the card",
-                { onChoosePhoto(Side.BACK) }, { onTakePhoto(Side.BACK) }, { onRemovePhoto(Side.BACK) })
+                { onChoosePhoto(Side.BACK) }, { onTakePhoto(Side.BACK) }, { onRemovePhoto(Side.BACK) }, { onRotatePhoto(Side.BACK) })
 
             SectionTitle("Name")
             Group {
@@ -265,32 +267,26 @@ fun EditScreen(
 
             SectionTitle("QR code")
             Group {
-                val qrPreview = session.previews[Side.QR]
-                val generated = remember(session.qrText, qrPreview) {
-                    if (qrPreview == null && session.qrText.isNotEmpty()) {
-                        runCatching { Qr.toBitmap(Qr.encode(session.qrText, 240)).asImageBitmap() }.getOrNull()
-                    } else {
-                        null
-                    }
-                }
-                val shown = qrPreview ?: generated
+                val code = session.qrCode
+                val picture = session.previews[Side.QR]
                 when {
                     session.scanning -> Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.size(20.dp), color = Palette.Accent, strokeWidth = 2.dp)
                         Spacer(Modifier.width(12.dp))
                         Text("Looking for a QR code…", color = Palette.Text2)
                     }
-                    shown != null -> Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Image(
-                            shown, "QR code",
-                            filterQuality = FilterQuality.None,
-                            modifier = Modifier.size(72.dp).clip(RoundedCornerShape(10.dp)).background(Color.White).padding(4.dp),
-                        )
+                    code != null || picture != null -> Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        val thumb = Modifier.size(72.dp).clip(RoundedCornerShape(10.dp)).background(Color.White).padding(4.dp)
+                        if (code != null) {
+                            QrCodeView(code, thumb)
+                        } else if (picture != null) {
+                            Image(picture, "QR code", filterQuality = FilterQuality.None, modifier = thumb)
+                        }
                         Spacer(Modifier.width(14.dp))
                         Column(Modifier.weight(1f)) {
                             Text("QR code saved", color = Palette.Text, fontWeight = FontWeight.SemiBold)
                             Text(
-                                if (qrPreview != null) "Kept exactly as on your document" else "Created from the text you typed",
+                                if (code != null) "Exact code · shown in high definition" else "Saved as a picture",
                                 color = Palette.Text3,
                                 fontSize = 13.sp,
                             )
@@ -315,7 +311,7 @@ fun EditScreen(
     }
 
     if (typing) {
-        var text by remember { mutableStateOf(session.qrText) }
+        var text by remember { mutableStateOf(session.fields["qr"].orEmpty()) }
         AlertDialog(
             onDismissRequest = { typing = false },
             containerColor = Palette.Surface,
@@ -345,6 +341,7 @@ private fun PhotoSlot(
     onChoose: () -> Unit,
     onCamera: () -> Unit,
     onRemove: () -> Unit,
+    onRotate: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     Box {
@@ -359,17 +356,9 @@ private fun PhotoSlot(
         ) {
             if (image != null) {
                 Image(image, title, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
-                Box(
-                    Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(10.dp)
-                        .size(34.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.6f))
-                        .clickable(onClick = onRemove),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Rounded.Close, "Remove photo", tint = Color.White, modifier = Modifier.size(18.dp))
+                Row(Modifier.align(Alignment.TopEnd).padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PhotoAction(Icons.Rounded.RotateRight, "Rotate photo", onRotate)
+                    PhotoAction(Icons.Rounded.Close, "Remove photo", onRemove)
                 }
             } else {
                 Canvas(Modifier.fillMaxSize()) {
@@ -598,3 +587,17 @@ fun EraseDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     )
 }
 
+
+@Composable
+private fun PhotoAction(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.62f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, description, tint = Color.White, modifier = Modifier.size(19.dp))
+    }
+}

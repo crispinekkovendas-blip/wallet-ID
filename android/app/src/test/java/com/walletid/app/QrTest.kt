@@ -1,41 +1,47 @@
 package com.walletid.app
 
 import com.walletid.app.data.Qr
+import com.walletid.app.data.QrModules
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class QrTest {
-    private fun pixels(text: String, size: Int, pad: Int): Triple<IntArray, Int, Int> {
-        val m = Qr.encode(text, size)
-        val w = m.width + pad * 2
-        val px = IntArray(w * w) { -1 }
-        for (y in 0 until m.height) for (x in 0 until m.width) {
-            if (m.get(x, y)) px[(y + pad) * w + x + pad] = 0xFF000000.toInt()
-        }
-        return Triple(px, w, w)
+    @Test
+    fun readsTheExactGridBack() {
+        val code = Qr.encode("https://example.com/validate?doc=12345&nome=João")
+        val (px, w, h) = Qr.pixels(code, scale = 6)
+        val read = Qr.read(px, w, h)
+        assertNotNull(read)
+        assertEquals(code.text, read!!.text)
+        assertTrue("same modules, square for square", read.sameGridAs(code))
     }
 
     @Test
-    fun encodesAndReadsBack() {
-        val text = "https://example.com/validate?doc=12345&nome=João"
-        val (px, w, h) = pixels(text, 400, 60)
-        val hit = Qr.decode(px, w, h)!!
-        assertEquals(text, hit.text)
-        // The reported box sits inside the image, around the code.
-        assertTrue(hit.left >= 60f && hit.right <= w - 60f)
+    fun denseCodesLikeTheCnh() {
+        // The CNH's code carries ~485 characters (a 77×77 grid).
+        val text = (0 until 485).map { "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/="[(it * 7) % 39] }.joinToString("")
+        val code = Qr.encode(text)
+        assertTrue(code.size >= 69)
+        val (px, w, h) = Qr.pixels(code, scale = 4)
+        val read = Qr.read(px, w, h)!!
+        assertEquals(text, read.text)
+        assertTrue(read.sameGridAs(code))
     }
 
     @Test
-    fun readsLongPayloads() {
-        val text = "A".repeat(900) + "1234567890".repeat(40)
-        val (px, w, h) = pixels(text, 900, 20)
-        assertEquals(text, Qr.decode(px, w, h)!!.text)
+    fun storageRoundTrip() {
+        val code = Qr.encode("SAMPLE 000001")
+        val back = QrModules.parse(code.text, code.serialize())!!
+        assertTrue(back.sameGridAs(code))
+        assertEquals("SAMPLE 000001", back.text)
+        assertNull(QrModules.parse("x", "garbage"))
     }
 
     @Test
     fun noCodeInBlankImage() {
-        assertNull(Qr.decode(IntArray(200 * 200) { -1 }, 200, 200))
+        assertNull(Qr.read(IntArray(200 * 200) { -1 }, 200, 200))
     }
 }

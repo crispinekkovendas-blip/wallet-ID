@@ -22,6 +22,7 @@ import com.walletid.app.data.Images
 import com.walletid.app.data.KeystoreCipher
 import com.walletid.app.data.NotABackupException
 import com.walletid.app.data.Qr
+import com.walletid.app.data.QrModules
 import com.walletid.app.data.Side
 import com.walletid.app.data.Vault
 import com.walletid.app.data.WrongPassphraseException
@@ -50,8 +51,9 @@ class EditSession(val id: String?, typeKey: String, initial: Map<String, String>
     var scanning by mutableStateOf(false)
 
     val title: String get() = fields["title"].orEmpty()
-    val qrText: String get() = fields["qr"].orEmpty()
-    val hasQr: Boolean get() = qrText.isNotEmpty() || previews[Side.QR] != null
+    val qrCode: QrModules? get() = fields["qrModules"]?.let { QrModules.parse(fields["qr"].orEmpty(), it) }
+    /** An older card may only have a picture of its QR code. */
+    val hasQr: Boolean get() = qrCode != null || previews[Side.QR] != null
 
     fun asDoc() = Doc(id ?: "draft", fields.toMap() + ("type" to typeKey))
 }
@@ -97,6 +99,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 docs = withContext(Dispatchers.IO) { vault.load() }
                 unlocked = true
                 docs.forEach { loadThumb(it.id) }
+                upgradeSavedCards()
             } catch (e: Exception) {
                 say("Couldn’t open the vault: ${e.message}")
             } finally {
@@ -154,14 +157,45 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { thumbs[id] = image(id, Side.FRONT, 1000) }
     }
 
-    fun hasQr(id: String) = doc(id)?.get("qr")?.isNotEmpty() == true || vault.hasImage(id, Side.QR)
+    fun hasQr(id: String) = qrCode(id) != null || vault.hasImage(id, Side.QR)
 
-    /** The exact QR crop when we have one, otherwise a code generated from the stored text. */
-    suspend fun qrImage(id: String): ImageBitmap? {
-        image(id, Side.QR, 1600)?.let { return it }
-        val text = doc(id)?.get("qr").orEmpty()
-        if (text.isEmpty()) return null
-        return withContext(Dispatchers.Default) { runCatching { Qr.toBitmap(Qr.encode(text)).asImageBitmap() }.getOrNull() }
+    fun qrCode(id: String): QrModules? = doc(id)?.let { d -> d.fields["qrModules"]?.let { QrModules.parse(d["qr"], it) } }
+
+    /**
+     * Cards saved by earlier versions: turn portrait photos to landscape (trimming margins),
+     * and replace a QR picture with its exact module grid so it shows in high definition.
+     */
+    private fun upgradeSavedCards() {
+        if (prefs.getBoolean("cardsUpgradedV2", false)) return
+        viewModelScope.launch {
+            val updated = withContext(Dispatchers.IO) {
+                docs.map { d ->
+                    var changed = false
+                    for (side in listOf(Side.FRONT, Side.BACK)) {
+                        val bytes = vault.loadImage(d.id, side) ?: continue
+                        if (!Images.isPortrait(bytes)) continue
+                        val bmp = Images.decode(bytes, 2400) ?: continue
+                        vault.saveImage(d.id, side, Images.encode(Images.normalize(bmp)))
+                        changed = true
+                    }
+                    var fields = d.fields
+                    if (fields["qrModules"] == null) {
+                        val code = vault.loadImage(d.id, Side.QR)?.let { Images.decode(it, 2400) }?.let { Qr.find(it) }
+                        if (code != null) {
+                            fields = fields + mapOf("qr" to code.text, "qrModules" to code.serialize())
+                            vault.saveImage(d.id, Side.QR, null)
+                            changed = true
+                        }
+                    }
+                    if (changed) Doc(d.id, fields) else d
+                }.also { vault.saveAll(it) }
+            }
+            docs = updated
+            imagesVersion++
+            imageCache.clear()
+            docs.forEach { loadThumb(it.id) }
+            prefs.edit().putBoolean("cardsUpgradedV2", true).apply()
+        }
     }
 
     // ---------- Add / edit ----------
@@ -212,10 +246,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val bytes = withContext(Dispatchers.IO) { Images.prepare(getApplication<Application>().contentResolver, uri) }
                 if (!scanForQr(session, bytes, quiet = false)) {
-                    session.fields["qr"] = ""
+                    session.fields.remove("qrModules")
+                    session.fields.remove("qr")
                     session.imageChanges[Side.QR] = bytes
                     session.previews[Side.QR] = withContext(Dispatchers.Default) { Images.decode(bytes, 800)?.asImageBitmap() }
-                    say("Couldn’t read the code, so the image was saved as it is")
+                    say("Couldn’t read the code, so the picture was saved as it is. A sharper screenshot gives a high-definition code.")
                 }
             } catch (e: Exception) {
                 say(e.message ?: "Couldn’t read that image")
@@ -237,26 +272,56 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             if (!quiet) say("No QR code found in that image")
             return false
         }
-        session.fields["qr"] = found.text
-        session.imageChanges[Side.QR] = found.cropPng
-        session.previews[Side.QR] = withContext(Dispatchers.Default) { Images.decode(found.cropPng, 800)?.asImageBitmap() }
-        say("QR code found and saved")
+        setQrCode(session, found)
+        say("QR code found · saved in high definition")
         return true
+    }
+
+    private fun setQrCode(session: EditSession, code: QrModules) {
+        session.fields["qr"] = code.text
+        session.fields["qrModules"] = code.serialize()
+        // The grid replaces any older QR picture.
+        session.imageChanges[Side.QR] = null
+        session.previews[Side.QR] = null
     }
 
     fun setQrText(text: String) {
         val session = edit ?: return
-        session.fields["qr"] = text.trim()
-        // A typed code replaces any scanned picture; it will be generated from the text.
-        session.imageChanges[Side.QR] = null
-        session.previews[Side.QR] = null
+        val clean = text.trim()
+        if (clean.isEmpty()) return
+        runCatching { Qr.encode(clean) }
+            .onSuccess { setQrCode(session, it) }
+            .onFailure { say("That text is too long for a QR code") }
     }
 
     fun removeImage(side: Side) {
         val session = edit ?: return
         session.imageChanges[side] = null
         session.previews[side] = null
-        if (side == Side.QR) session.fields["qr"] = ""
+        if (side == Side.QR) {
+            session.fields.remove("qr")
+            session.fields.remove("qrModules")
+        }
+    }
+
+    /** Turns a photo a quarter turn clockwise. */
+    fun rotateImage(side: Side) {
+        val session = edit ?: return
+        viewModelScope.launch {
+            try {
+                val current = if (side in session.imageChanges) {
+                    session.imageChanges[side]
+                } else {
+                    session.id?.let { id -> withContext(Dispatchers.IO) { vault.loadImage(id, side) } }
+                }
+                if (current == null) return@launch
+                val turned = withContext(Dispatchers.Default) { Images.rotate(current, 90) }
+                session.imageChanges[side] = turned
+                session.previews[side] = withContext(Dispatchers.Default) { Images.decode(turned, 1000)?.asImageBitmap() }
+            } catch (e: Exception) {
+                say(e.message ?: "Couldn’t rotate that image")
+            }
+        }
     }
 
     fun save() {
@@ -267,7 +332,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val id = session.id ?: UUID.randomUUID().toString()
         val existing = doc(id)
         val title = clean["title"].orEmpty().ifEmpty { DocTypes.get(session.typeKey).abbr }
-        val fields = ((existing?.fields.orEmpty() + clean).filterValues { it.isNotEmpty() }) +
+        // Keys the form removed (e.g. a deleted QR code) must not survive from the old fields.
+        val removed = setOf("qr", "qrModules").filter { it !in clean }.toSet()
+        val fields = ((existing?.fields.orEmpty() - removed + clean).filterValues { it.isNotEmpty() }) +
             mapOf("type" to session.typeKey, "title" to title)
         val updated = Doc(id, fields)
         val newList = if (existing != null) docs.map { if (it.id == id) updated else it } else docs + updated
