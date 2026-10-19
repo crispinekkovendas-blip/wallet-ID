@@ -108,6 +108,7 @@ class ScreenshotTest {
             doc = docs[1], front = green.asImageBitmap(), back = greenBack.asImageBitmap(),
             hasQr = true, qr = Qr.encode(DENSE_QR), qrPicture = null, showQr = showQr,
             flipped = flipped, onFlip = {}, onShowQr = {}, onBack = {}, onEdit = {}, onShare = {}, onDelete = {},
+            animateIn = false,
         )
     }
 

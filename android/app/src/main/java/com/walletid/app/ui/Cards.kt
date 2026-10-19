@@ -1,5 +1,16 @@
 package com.walletid.app.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Brush
 import android.app.Activity
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -75,68 +86,6 @@ fun PhotoCard(doc: Doc, image: ImageBitmap?, modifier: Modifier = Modifier) {
             .border(1.dp, Color.White.copy(alpha = 0.10f), CardShape),
     ) {
         Image(image, doc.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-    }
-}
-
-/**
- * The expanded card. Tap to flip it over (3D) and see the back photo.
- * Sized to the front photo's own proportions so nothing is cropped.
- */
-@Composable
-fun FlipCard(
-    doc: Doc,
-    front: ImageBitmap?,
-    back: ImageBitmap?,
-    flipped: Boolean,
-    onFlip: () -> Unit,
-    modifier: Modifier = Modifier,
-    frontModifier: Modifier = Modifier,
-) {
-    val rotation by animateFloatAsState(
-        targetValue = if (flipped) 180f else 0f,
-        animationSpec = tween(650, easing = FastOutSlowInEasing),
-        label = "flip",
-    )
-    BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
-        val ratio = front?.let { it.width.toFloat() / it.height } ?: CARD_RATIO
-        val w = if (maxWidth / ratio <= maxHeight) maxWidth else maxHeight * ratio
-        val h = w / ratio
-        Box(
-            Modifier
-                .size(w, h)
-                .graphicsLayer {
-                    rotationY = rotation
-                    cameraDistance = 14f * density
-                }
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onFlip),
-        ) {
-            if (rotation <= 90f) {
-                Box(frontModifier.fillMaxSize()) {
-                    if (front != null) {
-                        Image(
-                            front, "Front of ${doc.title}",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxSize().shadow(24.dp, CardShape).clip(CardShape),
-                        )
-                    } else {
-                        IdCard(doc, Modifier.align(Alignment.Center))
-                    }
-                }
-            } else {
-                // Counter-rotate so the back isn't mirrored.
-                Box(Modifier.fillMaxSize().graphicsLayer { rotationY = 180f }, contentAlignment = Alignment.Center) {
-                    if (back != null) {
-                        Image(
-                            back, "Back of ${doc.title}",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxSize().shadow(24.dp, CardShape).clip(CardShape),
-                        )
-                    } else {
-                        NoBackSide()
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -272,6 +221,139 @@ fun QrPanel(title: String, code: QrModules?, picture: ImageBitmap?, onClose: () 
             ) {
                 Text("Done", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
             }
+        }
+    }
+}
+
+/**
+ * The card filling the whole screen: a landscape card is turned upright (a quarter turn,
+ * like holding the phone sideways) so every detail shows at the largest size. It turns into
+ * place when it opens, and tapping flips it over to the back.
+ */
+@Composable
+fun PortraitCard(
+    doc: Doc,
+    front: ImageBitmap?,
+    back: ImageBitmap?,
+    flipped: Boolean,
+    onFlip: () -> Unit,
+    modifier: Modifier = Modifier,
+    animateIn: Boolean = true,
+) {
+    val ratio = front?.let { it.width.toFloat() / it.height } ?: CARD_RATIO
+    val landscape = ratio > 1f
+    val turn = remember { Animatable(if (animateIn && landscape) 0f else if (landscape) 90f else 0f) }
+    LaunchedEffect(landscape) {
+        turn.animateTo(if (landscape) 90f else 0f, spring(dampingRatio = 0.82f, stiffness = 140f))
+    }
+    val flip by animateFloatAsState(
+        targetValue = if (flipped) 180f else 0f,
+        animationSpec = tween(650, easing = FastOutSlowInEasing),
+        label = "flip",
+    )
+
+    BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
+        // The card's own size. A landscape card is turned, so its width runs along the screen's height.
+        val cardW = if (landscape) minOf(maxHeight, maxWidth * ratio) else minOf(maxHeight, maxWidth / ratio) * ratio
+        val cardH = cardW / ratio
+        // While turning, shrink so the card never spills past the screen edges.
+        val progress = if (landscape) turn.value / 90f else 1f
+        val fitWidth = (maxWidth / cardW).coerceAtMost(1f)
+        val scale = fitWidth + (1f - fitWidth) * progress
+
+        Box(
+            Modifier
+                .size(if (landscape) cardH else cardW, if (landscape) cardW else cardH)
+                .graphicsLayer {
+                    rotationY = flip
+                    cameraDistance = 16f * density
+                }
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onFlip),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                Modifier
+                    .requiredSize(cardW, cardH)
+                    .graphicsLayer {
+                        rotationZ = turn.value
+                        scaleX = scale
+                        scaleY = scale
+                    },
+            ) {
+                if (flip <= 90f) {
+                    if (front != null) {
+                        Image(
+                            front, "Front of ${doc.title}",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize().shadow(30.dp, CardShape).clip(CardShape),
+                        )
+                    } else {
+                        IdCard(doc, Modifier.align(Alignment.Center))
+                    }
+                } else {
+                    Box(Modifier.fillMaxSize().graphicsLayer { rotationY = 180f }, contentAlignment = Alignment.Center) {
+                        if (back != null) {
+                            Image(
+                                back, "Back of ${doc.title}",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize().shadow(30.dp, CardShape).clip(CardShape),
+                            )
+                        } else {
+                            NoBackSide()
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** An authenticity seal. Tapping it shows the document's QR code for verification. */
+@Composable
+fun CertificateBadge(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val shine = rememberInfiniteTransition(label = "shine")
+    val sweep by shine.animateFloat(
+        initialValue = -0.6f,
+        targetValue = 1.6f,
+        animationSpec = infiniteRepeatable(tween(2600, delayMillis = 900, easing = LinearEasing)),
+        label = "sweep",
+    )
+    val shape = RoundedCornerShape(50)
+    Row(
+        modifier
+            .shadow(24.dp, shape, spotColor = Color(0xFF10B981), ambientColor = Color(0xFF10B981))
+            .clip(shape)
+            .background(Brush.linearGradient(listOf(Color(0xFF064E3B), Color(0xFF047857), Color(0xFF065F46))))
+            .drawWithContent {
+                drawContent()
+                // A soft light sweeping across, like a hologram.
+                val x = size.width * sweep
+                drawRect(
+                    Brush.linearGradient(
+                        listOf(Color.Transparent, Color.White.copy(alpha = 0.22f), Color.Transparent),
+                        start = Offset(x - size.height * 1.5f, 0f),
+                        end = Offset(x + size.height * 1.5f, size.height),
+                    ),
+                )
+            }
+            .border(1.dp, Brush.linearGradient(listOf(Color(0xFFFDE68A), Color(0xFFD9B26A), Color(0xFFFDE68A))), shape)
+            .clickable(onClick = onClick)
+            .padding(start = 8.dp, end = 20.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(Brush.radialGradient(listOf(Color(0xFFFFF3CF), Color(0xFFD9B26A)))),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Rounded.Verified, null, tint = Color(0xFF065F46), modifier = Modifier.size(24.dp))
+        }
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text("Certificado", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.3.sp)
+            Text("Documento autêntico · ver QR code", color = Color(0xFFD1FAE5), fontSize = 12.sp)
         }
     }
 }

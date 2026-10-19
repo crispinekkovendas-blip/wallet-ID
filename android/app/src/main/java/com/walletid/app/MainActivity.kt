@@ -18,8 +18,6 @@ import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -152,7 +150,6 @@ class MainActivity : FragmentActivity() {
     }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun AppRoot(
     vm: AppViewModel,
@@ -199,99 +196,92 @@ private fun AppRoot(
         if (!vm.unlocked) {
             LockScreen(canAuthenticate, authError, onUnlock, onOpenSecuritySettings)
         } else {
-            SharedTransitionLayout {
-                AnimatedContent(
-                    targetState = vm.screen,
-                    transitionSpec = { fadeIn(tween(320)) togetherWith fadeOut(tween(320)) },
-                    label = "screens",
-                ) { s ->
-                    // The tapped card grows from its place in the wallet into the full-size card.
-                    val cardModifier: @Composable (String) -> Modifier = { id ->
-                        Modifier.sharedElement(
-                            rememberSharedContentState(key = "card-$id"),
-                            animatedVisibilityScope = this@AnimatedContent,
-                        )
-                    }
-                    when (s) {
-                        Screen.Wallet -> WalletScreen(
-                            docs = vm.visibleDocs,
-                            thumbs = vm.thumbs,
-                            totalCount = vm.docs.size,
-                            query = vm.query,
-                            onQuery = { vm.query = it },
-                            onOpen = { vm.open(Screen.Detail(it)) },
-                            onAdd = vm::startAdd,
-                            onSettings = { vm.open(Screen.Settings) },
-                            onLock = vm::lock,
-                            cardModifier = cardModifier,
-                        )
-                        Screen.Edit -> vm.edit?.let { session ->
-                            EditScreen(
-                                session = session,
-                                onCancel = { vm.back() },
-                                onSave = vm::save,
-                                onChoosePhoto = { side ->
-                                    photoSide = side
-                                    vm.externalActivity = true
-                                    pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                                },
-                                onTakePhoto = { side ->
-                                    photoSide = side
-                                    val uri = vm.newCameraUri()
-                                    cameraUri = uri
-                                    vm.externalActivity = true
-                                    takePhoto.launch(uri)
-                                },
-                                onRemovePhoto = vm::removeImage,
-                                onRotatePhoto = vm::rotateImage,
-                                onLabel = vm::setLabel,
-                                onQrFromImage = {
-                                    vm.externalActivity = true
-                                    pickQr.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                                },
-                                onQrText = vm::setQrText,
-                            )
-                        }
-                        is Screen.Detail -> vm.doc(s.id)?.let { doc ->
-                            val version = vm.imagesVersion
-                            var flipped by remember(doc.id) { mutableStateOf(false) }
-                            val front by produceState(vm.thumbs[doc.id], doc.id, version) { value = vm.image(doc.id, Side.FRONT, 1800) ?: value }
-                            val back by produceState<ImageBitmap?>(null, doc.id, version) { value = vm.image(doc.id, Side.BACK, 1800) }
-                            val hasQr = vm.hasQr(doc.id)
-                            val qrPicture by produceState<ImageBitmap?>(null, doc.id, version, hasQr) {
-                                value = if (hasQr) vm.image(doc.id, Side.QR, 1600) else null
-                            }
-                            CardScreen(
-                                doc = doc,
-                                front = front,
-                                back = back,
-                                hasQr = hasQr,
-                                qr = vm.qrCode(doc.id),
-                                qrPicture = qrPicture,
-                                showQr = qrFor == doc.id,
-                                flipped = flipped,
-                                onFlip = { flipped = !flipped },
-                                onShowQr = { qrFor = if (it) doc.id else null },
-                                onBack = { vm.back() },
-                                onEdit = { vm.startEdit(doc.id) },
-                                onShare = { side -> scope.launch { vm.sharePhotoUri(doc.id, side)?.let(onShare) } },
-                                onDelete = { vm.delete(doc.id) },
-                                frontModifier = cardModifier(doc.id),
-                            )
-                        }
-                        Screen.Settings -> SettingsScreen(
-                            lockAfterSeconds = vm.lockAfterSeconds,
-                            version = BuildConfig.VERSION_NAME,
-                            onLockAfter = vm::setLockAfter,
-                            onExport = { askExport = true },
-                            onImport = {
+            AnimatedContent(
+                targetState = vm.screen,
+                transitionSpec = { fadeIn(tween(320)) togetherWith fadeOut(tween(320)) },
+                label = "screens",
+            ) { s ->
+                when (s) {
+                    Screen.Wallet -> WalletScreen(
+                        docs = vm.visibleDocs,
+                        thumbs = vm.thumbs,
+                        totalCount = vm.docs.size,
+                        query = vm.query,
+                        onQuery = { vm.query = it },
+                        onOpen = { vm.open(Screen.Detail(it)) },
+                        onAdd = vm::startAdd,
+                        onSettings = { vm.open(Screen.Settings) },
+                        onLock = vm::lock,
+                        onImport = {
+                            vm.externalActivity = true
+                            openBackup.launch(arrayOf("*/*"))
+                        },
+                    )
+                    Screen.Edit -> vm.edit?.let { session ->
+                        EditScreen(
+                            session = session,
+                            onCancel = { vm.back() },
+                            onSave = vm::save,
+                            onChoosePhoto = { side ->
+                                photoSide = side
                                 vm.externalActivity = true
-                                openBackup.launch(arrayOf("*/*"))
+                                pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                             },
-                            onErase = { askErase = true },
-                            onBack = { vm.back() },
+                            onTakePhoto = { side ->
+                                photoSide = side
+                                val uri = vm.newCameraUri()
+                                cameraUri = uri
+                                vm.externalActivity = true
+                                takePhoto.launch(uri)
+                            },
+                            onRemovePhoto = vm::removeImage,
+                            onRotatePhoto = vm::rotateImage,
+                            onLabel = vm::setLabel,
+                            onQrFromImage = {
+                                vm.externalActivity = true
+                                pickQr.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            },
+                            onQrText = vm::setQrText,
                         )
                     }
+                    is Screen.Detail -> vm.doc(s.id)?.let { doc ->
+                        val version = vm.imagesVersion
+                        var flipped by remember(doc.id) { mutableStateOf(false) }
+                        val front by produceState(vm.thumbs[doc.id], doc.id, version) { value = vm.image(doc.id, Side.FRONT, 1800) ?: value }
+                        val back by produceState<ImageBitmap?>(null, doc.id, version) { value = vm.image(doc.id, Side.BACK, 1800) }
+                        val hasQr = vm.hasQr(doc.id)
+                        val qrPicture by produceState<ImageBitmap?>(null, doc.id, version, hasQr) {
+                            value = if (hasQr) vm.image(doc.id, Side.QR, 1600) else null
+                        }
+                        CardScreen(
+                            doc = doc,
+                            front = front,
+                            back = back,
+                            hasQr = hasQr,
+                            qr = vm.qrCode(doc.id),
+                            qrPicture = qrPicture,
+                            showQr = qrFor == doc.id,
+                            flipped = flipped,
+                            onFlip = { flipped = !flipped },
+                            onShowQr = { qrFor = if (it) doc.id else null },
+                            onBack = { vm.back() },
+                            onEdit = { vm.startEdit(doc.id) },
+                            onShare = { side -> scope.launch { vm.sharePhotoUri(doc.id, side)?.let(onShare) } },
+                            onDelete = { vm.delete(doc.id) },
+                        )
+                    }
+                    Screen.Settings -> SettingsScreen(
+                        lockAfterSeconds = vm.lockAfterSeconds,
+                        version = BuildConfig.VERSION_NAME,
+                        onLockAfter = vm::setLockAfter,
+                        onExport = { askExport = true },
+                        onImport = {
+                            vm.externalActivity = true
+                            openBackup.launch(arrayOf("*/*"))
+                        },
+                        onErase = { askErase = true },
+                        onBack = { vm.back() },
+                    )
                 }
             }
         }

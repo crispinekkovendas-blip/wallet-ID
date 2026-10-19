@@ -126,7 +126,7 @@ fun WalletScreen(
     onAdd: () -> Unit,
     onSettings: () -> Unit,
     onLock: () -> Unit,
-    cardModifier: @Composable (String) -> Modifier = { Modifier },
+    onImport: () -> Unit = {},
 ) {
     Box(Modifier.fillMaxSize().background(Palette.Bg)) {
         Column(
@@ -152,7 +152,7 @@ fun WalletScreen(
             }
 
             if (totalCount == 0) {
-                EmptyWallet(onAdd)
+                EmptyWallet(onAdd, onImport)
                 return@Column
             }
 
@@ -206,7 +206,6 @@ fun WalletScreen(
                         thumbs[d.id],
                         Modifier
                             .then(if (stacked && !last) Modifier.peek(84.dp) else Modifier)
-                            .then(cardModifier(d.id))
                             .clip(RoundedCornerShape(18.dp))
                             .clickable { onOpen(d.id) },
                     )
@@ -262,7 +261,7 @@ private fun SearchField(query: String, onQuery: (String) -> Unit, modifier: Modi
 }
 
 @Composable
-private fun EmptyWallet(onAdd: () -> Unit) {
+private fun EmptyWallet(onAdd: () -> Unit, onImport: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.width(230.dp).height(170.dp)) {
             val cards = listOf(
@@ -293,5 +292,7 @@ private fun EmptyWallet(onAdd: () -> Unit) {
         )
         Spacer(Modifier.height(24.dp))
         GradientButton("Add card", onAdd, icon = Icons.Rounded.Add)
+        Spacer(Modifier.height(12.dp))
+        TextAction("Import a backup", onImport)
     }
 }

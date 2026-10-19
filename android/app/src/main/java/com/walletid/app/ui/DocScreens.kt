@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -88,7 +89,7 @@ import com.walletid.app.data.Doc
 import com.walletid.app.data.QrModules
 import com.walletid.app.data.Side
 
-// ---------------------------------------------------------------- Card (expanded)
+// ---------------------------------------------------------------- Card (full screen)
 
 @Composable
 fun CardScreen(
@@ -106,65 +107,79 @@ fun CardScreen(
     onEdit: () -> Unit,
     onShare: (Side) -> Unit,
     onDelete: () -> Unit,
-    frontModifier: Modifier = Modifier,
+    animateIn: Boolean = true,
 ) {
     var menu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
 
-    Box(Modifier.fillMaxSize().background(Palette.Bg)) {
-        Column(Modifier.fillMaxSize()) {
-            NavBar(
-                doc.title,
-                left = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBackIos, "Back", tint = Palette.Text, modifier = Modifier.size(20.dp)) } },
-                right = {
-                    Box {
-                        IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "More", tint = Palette.Text) }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = Palette.Surface2) {
-                            DropdownMenuItem(text = { Text("Edit") }, leadingIcon = { Icon(Icons.Rounded.Edit, null) }, onClick = { menu = false; onEdit() })
-                            if (front != null) {
-                                DropdownMenuItem(text = { Text("Share front") }, leadingIcon = { Icon(Icons.Rounded.Share, null) }, onClick = { menu = false; onShare(Side.FRONT) })
-                            }
-                            if (back != null) {
-                                DropdownMenuItem(text = { Text("Share back") }, leadingIcon = { Icon(Icons.Rounded.Share, null) }, onClick = { menu = false; onShare(Side.BACK) })
-                            }
-                            DropdownMenuItem(
-                                text = { Text("Delete", color = Palette.Bad) },
-                                leadingIcon = { Icon(Icons.Rounded.DeleteOutline, null, tint = Palette.Bad) },
-                                onClick = { menu = false; confirmDelete = true },
-                            )
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Brush.radialGradient(listOf(Color(0xFF141B30), Color.Black), radius = 1600f)),
+    ) {
+        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+            Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Rounded.Close, "Close", tint = Color.White) }
+                Text(
+                    doc.title,
+                    color = Color.White,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                Box {
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "More", tint = Color.White) }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = Palette.Surface2) {
+                        DropdownMenuItem(text = { Text("Edit") }, leadingIcon = { Icon(Icons.Rounded.Edit, null) }, onClick = { menu = false; onEdit() })
+                        if (front != null) {
+                            DropdownMenuItem(text = { Text("Share front") }, leadingIcon = { Icon(Icons.Rounded.Share, null) }, onClick = { menu = false; onShare(Side.FRONT) })
                         }
+                        if (back != null) {
+                            DropdownMenuItem(text = { Text("Share back") }, leadingIcon = { Icon(Icons.Rounded.Share, null) }, onClick = { menu = false; onShare(Side.BACK) })
+                        }
+                        DropdownMenuItem(
+                            text = { Text("Delete", color = Palette.Bad) },
+                            leadingIcon = { Icon(Icons.Rounded.DeleteOutline, null, tint = Palette.Bad) },
+                            onClick = { menu = false; confirmDelete = true },
+                        )
                     }
-                },
-            )
-            FlipCard(
-                doc, front, back, flipped, onFlip,
-                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
-                frontModifier = frontModifier,
-            )
-            Row(Modifier.align(Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.TouchApp, null, tint = Palette.Text3, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(if (flipped) "Tap the card to see the front" else "Tap the card to see the back", color = Palette.Text3, fontSize = 13.sp)
+                }
             }
-            Spacer(Modifier.height(18.dp))
-            Box(Modifier.navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 20.dp)) {
+
+            PortraitCard(
+                doc, front, back, flipped, onFlip,
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                animateIn = animateIn,
+            )
+
+            Column(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 if (hasQr) {
-                    GradientButton("Show QR code", { onShowQr(true) }, Modifier.fillMaxWidth(), icon = Icons.Rounded.QrCode2)
+                    CertificateBadge(onClick = { onShowQr(true) })
                 } else {
                     Row(
                         Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .border(1.dp, Palette.Line2, RoundedCornerShape(14.dp))
-                            .clickable(onClick = onEdit),
-                        horizontalArrangement = Arrangement.Center,
+                            .clip(RoundedCornerShape(50))
+                            .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(50))
+                            .clickable(onClick = onEdit)
+                            .padding(horizontal = 18.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Rounded.QrCode2, null, tint = Palette.Text2, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Rounded.QrCode2, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Add QR code", color = Palette.Text2, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                        Text("Add QR code", color = Color.White.copy(alpha = 0.8f), fontWeight = FontWeight.SemiBold)
                     }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.TouchApp, null, tint = Color.White.copy(alpha = 0.45f), modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (flipped) "Tap the card to see the front" else "Tap the card to see the back",
+                        color = Color.White.copy(alpha = 0.45f),
+                        fontSize = 13.sp,
+                    )
                 }
             }
         }
