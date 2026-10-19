@@ -11,7 +11,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onRoot
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.unit.dp
+import com.walletid.app.ui.QrCodeView
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.walletid.app.data.Doc
@@ -132,6 +138,20 @@ class ScreenshotTest {
         assertNotNull("QR code on the fake verso should be detected", found)
         assertEquals(SAMPLE_QR, found!!.text)
         assertTrue(found.sameGridAs(Qr.encode(SAMPLE_QR)))
+    }
+
+    @Test fun qrViewScansBackExactly() {
+        // What the app draws (rounded corner markers included) must scan to the very same grid.
+        val code = Qr.encode(DENSE_QR)
+        compose.setContent { QrCodeView(code, Modifier.size(260.dp)) }
+        compose.waitForIdle()
+        val img = compose.onRoot().captureToImage().asAndroidBitmap()
+        val px = IntArray(img.width * img.height)
+        img.getPixels(px, 0, img.width, 0, 0, img.width, img.height)
+        val read = Qr.read(px, img.width, img.height)
+        assertNotNull("rendered code should scan", read)
+        assertEquals(DENSE_QR, read!!.text)
+        assertTrue("rendered code keeps the exact grid", read.sameGridAs(code))
     }
 
     @Test fun portraitScreenshotBecomesTrimmedLandscapeCard() {

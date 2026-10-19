@@ -161,8 +161,8 @@ private fun NoBackSide() {
 
 /**
  * Draws a QR code from its module grid as vector shapes: razor-sharp at any size.
- * Data modules stay square (what scanners expect); only the three corner markers get soft
- * corners, which every scanner still reads.
+ * Data modules stay square (what scanners expect); only the three corner markers get softly
+ * rounded corners.
  */
 @Composable
 fun QrCodeView(code: QrModules, modifier: Modifier = Modifier, ink: Color = QrInk) {
@@ -171,7 +171,7 @@ fun QrCodeView(code: QrModules, modifier: Modifier = Modifier, ink: Color = QrIn
         val quiet = 2
         // Whole pixels per module keeps every edge crisp.
         val cell = floor(size.minDimension / (n + quiet * 2)).coerceAtLeast(1f)
-        val origin = Offset((size.width - cell * n) / 2, (size.height - cell * n) / 2)
+        val origin = Offset(floor((size.width - cell * n) / 2), floor((size.height - cell * n) / 2))
         drawRect(Color.White)
 
         fun inFinder(x: Int, y: Int) = (x < 7 && y < 7) || (x >= n - 7 && y < 7) || (x < 7 && y >= n - 7)
@@ -186,9 +186,11 @@ fun QrCodeView(code: QrModules, modifier: Modifier = Modifier, ink: Color = QrIn
         }
         for ((fx, fy) in listOf(0 to 0, n - 7 to 0, 0 to n - 7)) {
             val o = Offset(origin.x + fx * cell, origin.y + fy * cell)
-            drawRoundRect(ink, o, Size(7 * cell, 7 * cell), CornerRadius(cell * 1.8f))
-            drawRoundRect(Color.White, o + Offset(cell, cell), Size(5 * cell, 5 * cell), CornerRadius(cell * 1.2f))
-            drawRoundRect(ink, o + Offset(2 * cell, 2 * cell), Size(3 * cell, 3 * cell), CornerRadius(cell * 0.9f))
+            // Radii small enough that every module's centre keeps its colour, so a scanner
+            // samples exactly the original grid (checked by ScreenshotTest.qrViewScansBackExactly).
+            drawRoundRect(ink, o, Size(7 * cell, 7 * cell), CornerRadius(cell * 1.0f))
+            drawRoundRect(Color.White, o + Offset(cell, cell), Size(5 * cell, 5 * cell), CornerRadius(cell * 0.8f))
+            drawRoundRect(ink, o + Offset(2 * cell, 2 * cell), Size(3 * cell, 3 * cell), CornerRadius(cell * 0.6f))
         }
     }
 }

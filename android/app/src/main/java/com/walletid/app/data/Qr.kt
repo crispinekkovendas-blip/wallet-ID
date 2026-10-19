@@ -60,8 +60,10 @@ object Qr {
         for (binarizer in listOf(HybridBinarizer(source), GlobalHistogramBinarizer(source))) {
             try {
                 val detected = Detector(binarizer.blackMatrix).detect(hints)
+                // Copy first: the decoder unmasks the grid in place while reading it.
+                val grid = detected.bits.clone()
                 val decoded = Decoder().decode(detected.bits, hints)
-                return QrModules.of(decoded.text, detected.bits)
+                return QrModules.of(decoded.text, grid)
             } catch (e: ReaderException) {
                 // try the next binarizer
             }

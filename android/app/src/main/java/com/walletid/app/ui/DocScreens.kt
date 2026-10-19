@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBackIos
+import androidx.compose.material.icons.automirrored.rounded.RotateRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Download
@@ -39,7 +40,6 @@ import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material.icons.rounded.QrCodeScanner
-import androidx.compose.material.icons.rounded.RotateRight
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Shield
@@ -357,7 +357,7 @@ private fun PhotoSlot(
             if (image != null) {
                 Image(image, title, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
                 Row(Modifier.align(Alignment.TopEnd).padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PhotoAction(Icons.Rounded.RotateRight, "Rotate photo", onRotate)
+                    PhotoAction(Icons.AutoMirrored.Rounded.RotateRight, "Rotate photo", onRotate)
                     PhotoAction(Icons.Rounded.Close, "Remove photo", onRemove)
                 }
             } else {
