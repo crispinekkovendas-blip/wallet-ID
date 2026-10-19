@@ -40,6 +40,20 @@ To fix this permanently, add these repository secrets (Settings → Secrets and 
 
 To build it yourself, open `android/` in Android Studio, or run `./gradlew assembleDebug`.
 
+## 🤰 Prenatal app (Android)
+
+The `prenatal/` folder is a second, separate app: a private place for your pregnancy records.
+
+- **Today:** pregnancy week and day, trimester, a progress ring, days to go, the baby's size this week, and what's coming up.
+- **Schedule:** appointments, ultrasounds, lab tests and vaccines, with reminders the day before at 9:00 and 2 hours before. It also has **suggested checkups** based on the Brazilian Ministry of Health prenatal guidance (first-trimester labs, nuchal translucency and morphology ultrasounds, the glucose tolerance test, the dTpa vaccine, the Group B strep swab and more), each marked as due now, scheduled, done or not needed. Your doctor's plan always comes first.
+- **Results:** values, notes, and photos or PDFs of each exam. PDFs open inside the app.
+- **Health:** weight with a chart, blood pressure, fundal height and the baby's heart rate.
+- **More:** your details and care team, a hospital-bag checklist, auto-lock, and encrypted backup and restore.
+
+Like Wallet ID, it unlocks with fingerprint, face or phone PIN, encrypts everything with a key held in the phone's Keystore, has no internet permission, and blocks screenshots.
+
+**Install:** open the repo's [Releases](../../releases) page, pick the newest `prenatal-v…` release, and download `Prenatal-….apk`.
+
 ## Use the web app
 
 1. Open the GitHub Pages site for this repo (Settings → Pages shows the URL).
